@@ -1,0 +1,29 @@
+# Core dependencies
+torch>=2.0.0
+transformers @ git+https://github.com/huggingface/transformers
+accelerate>=0.25.0
+datasets>=2.14.0
+
+# Audio processing
+librosa>=0.10.0
+soundfile>=0.12.0
+
+# Data processing
+numpy>=1.24.0
+pandas>=2.0.0
+tqdm>=4.66.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.13.0
+
+# Utilities
+python-dotenv>=1.0.0
+
+# GPU optimization (optional but recommended)
+# nvidia-ml-py3>=7.352.0  # For GPU monitoring
+
+# Development dependencies (optional)
+# pytest>=7.4.0
+# black>=23.0.0
+# flake8>=6.0.0

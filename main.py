@@ -1,5 +1,5 @@
 """
-Main execution script for GLOBE_V2 + Qwen2-Audio processing
+Lightweight main script for GLOBE_V2 processing
 """
 import argparse
 import logging
@@ -9,143 +9,183 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from src.config import setup_logging, get_device_info, OUTPUT_JSON, OUTPUT_TRAINING_DATA
-from src.dataset_processor import GlobeV2Processor
-from src.utils import (
-    analyze_processed_dataset, export_for_training,
-    create_visualization, sample_descriptions,
-    validate_checkpoint, estimate_remaining_time
+from config import (
+    setup_logging, check_resources, get_disk_space,
+    USE_STREAMING, USE_SUBSET, SUBSET_SIZE, USE_API,
+    USE_ALTERNATIVE_MODEL, MODEL_NAME, OUTPUT_JSON
 )
+import config as config
+from dataset_processor import GlobeV2StreamProcessor, test_processing
+from utils import analyze_processed_dataset, sample_descriptions
 
 logger = logging.getLogger(__name__)
 
-def test_processing(n_samples: int = 2):
-    """Test processing on a few samples"""
+def show_configuration():
+    """Display current configuration"""
+    print("\n" + "="*50)
+    print("CURRENT CONFIGURATION")
+    print("="*50)
+    print(f"Model: {MODEL_NAME}")
+    print(f"Streaming: {USE_STREAMING}")
+    print(f"Subset: {USE_SUBSET} (size: {SUBSET_SIZE if USE_SUBSET else 'full'})")
+    print(f"Using API: {USE_API}")
+    print(f"Alternative model: {USE_ALTERNATIVE_MODEL}")
+    print(f"Quantization: 8-bit={config.LOAD_IN_8BIT}, 4-bit={config.LOAD_IN_4BIT}")
+    
+    disk = get_disk_space()
+    print(f"\nDisk space: {disk['free_gb']:.1f} GB free")
+    print("="*50 + "\n")
+
+def run_test(n_samples: int = 2):
+    """Run test processing"""
+    show_configuration()
+    
+    if not check_resources():
+        response = input("\nResource check failed. Continue anyway? (y/n): ")
+        if response.lower() != 'y':
+            return
+    
     logger.info("Starting test processing...")
-    logger.info(f"Device info: {get_device_info()}")
-    
-    processor = GlobeV2Processor()
-    processor.load_dataset()
-    
-    # Process test samples
-    processed = processor.process_dataset(
-        start_idx=0,
-        end_idx=n_samples,
-        resume=False
-    )
-    
-    # Save results
-    if processed:
-        processor.save_results(processed)
-        
-        # Show samples
-        logger.info("\nSample results:")
-        for item in processed:
-            logger.info(f"\nSpeaker: {item['speaker_id']}")
-            logger.info(f"Transcript: {item['transcript'][:100]}...")
-            logger.info(f"Voice Analysis (preview): {item['voice_analysis'][:200]}...")
-    
-    return processed
+    processed = test_processing(config, n_samples)
+    logger.info(f"Test completed. Processed {processed} samples.")
 
-def process_full_dataset(start_idx: int = 0, end_idx: int = None, resume: bool = True):
-    """Process the full dataset"""
-    logger.info("Starting full dataset processing...")
-    logger.info(f"Device info: {get_device_info()}")
+def run_processing(max_samples: int = None, resume: bool = True):
+    """Run main processing"""
+    show_configuration()
     
-    processor = GlobeV2Processor()
-    processor.load_dataset()
+    if not check_resources():
+        response = input("\nResource check failed. Continue anyway? (y/n): ")
+        if response.lower() != 'y':
+            return
     
-    # Check checkpoint status
-    if resume:
-        checkpoint_info = validate_checkpoint(processor.checkpoint_data)
-        if checkpoint_info['valid']:
-            logger.info(f"Valid checkpoint found: {checkpoint_info['processed_count']} samples processed")
-            
-            # Estimate remaining time
-            time_est = estimate_remaining_time(processor.checkpoint_data, len(processor.dataset))
-            logger.info(f"Remaining samples: {time_est['remaining_samples']}")
-            logger.info(f"Estimated time: {time_est['estimated_hours']:.2f} hours")
+    processor = GlobeV2StreamProcessor(config)
     
-    # Process dataset
-    processed = processor.process_dataset(
-        start_idx=start_idx,
-        end_idx=end_idx,
-        resume=resume
-    )
+    # Determine max samples
+    if max_samples is None and USE_SUBSET:
+        max_samples = SUBSET_SIZE
     
-    # Save results
-    processor.save_results()
+    logger.info(f"Starting processing (max samples: {max_samples or 'unlimited'})...")
     
-    return processed
+    # Process
+    processed = processor.process_streaming(max_samples=max_samples)
+    
+    # Convert to HF dataset if needed
+    if OUTPUT_JSON.exists():
+        processor.convert_to_hf_dataset(OUTPUT_JSON)
+    
+    logger.info(f"Processing completed. Total processed: {processed}")
 
-def analyze_results():
-    """Analyze processed dataset"""
+def analyze():
+    """Analyze processed data"""
     if not OUTPUT_JSON.exists():
-        logger.error(f"No processed data found at {OUTPUT_JSON}")
+        logger.error(f"No output file found at {OUTPUT_JSON}")
         return
     
-    logger.info("Analyzing processed dataset...")
+    # Convert JSONL to JSON for analysis
+    import jsonlines
+    data = []
+    with jsonlines.open(OUTPUT_JSON) as reader:
+        for obj in reader:
+            data.append(obj)
     
-    # Get statistics
-    stats = analyze_processed_dataset(OUTPUT_JSON)
+    # Save as JSON for analysis functions
+    temp_json = OUTPUT_JSON.with_suffix('.json')
+    import json
+    with open(temp_json, 'w') as f:
+        json.dump(data, f)
     
-    # Print summary
-    logger.info(f"\nDataset Statistics:")
-    logger.info(f"Total samples: {stats.get('total_samples', 0)}")
+    # Analyze
+    logger.info("Analyzing results...")
+    stats = analyze_processed_dataset(temp_json)
     
-    for desc_type in ['voice_analysis', 'character_description']:
-        avg_key = f'avg_{desc_type}_length'
-        if avg_key in stats:
-            logger.info(f"Average {desc_type} length: {stats[avg_key]:.0f} chars")
+    logger.info(f"\nTotal samples: {stats.get('total_samples', 0)}")
     
-    # Create visualizations
-    viz_dir = OUTPUT_JSON.parent / "visualizations"
-    create_visualization(stats, viz_dir)
-    
-    # Show sample descriptions
-    samples = sample_descriptions(OUTPUT_JSON, n_samples=3)
-    logger.info("\nSample descriptions:")
+    # Show samples
+    samples = sample_descriptions(temp_json, n_samples=3)
     for i, sample in enumerate(samples):
         logger.info(f"\n--- Sample {i+1} ---")
-        logger.info(f"Speaker: {sample['speaker_id']} ({sample['metadata']})")
-        logger.info(f"Voice preview: {sample['voice_analysis_preview']}")
+        logger.info(f"Speaker: {sample['speaker_id']}")
+        logger.info(f"Description: {sample.get('voice_analysis_preview', sample.get('description', ''))[:200]}")
 
-def export_data(format_type: str = "instruction"):
-    """Export data for training"""
-    if not OUTPUT_JSON.exists():
-        logger.error(f"No processed data found at {OUTPUT_JSON}")
-        return
+def configure():
+    """Interactive configuration"""
+    print("\n" + "="*50)
+    print("CONFIGURATION WIZARD")
+    print("="*50)
     
-    logger.info(f"Exporting data in {format_type} format...")
+    print("\n1. Model Selection:")
+    print("   a) Qwen2-Audio with quantization (4-6 GB)")
+    print("   b) Whisper + analysis (1-2 GB)")
+    print("   c) API-based (no local model)")
     
-    output_path = OUTPUT_JSON.parent / f"globe_v2_{format_type}_format.json"
-    count = export_for_training(OUTPUT_JSON, output_path, format_type)
+    choice = input("\nSelect option (a/b/c): ").lower()
     
-    logger.info(f"Exported {count} samples to {output_path}")
+    if choice == 'a':
+        print("\nQuantization level:")
+        print("   1) 8-bit (better quality, ~7GB)")
+        print("   2) 4-bit (lower quality, ~3.5GB)")
+        quant = input("Select (1/2): ")
+        
+        # Update config file
+        config_updates = {
+            "USE_ALTERNATIVE_MODEL": False,
+            "USE_API": False,
+            "LOAD_IN_8BIT": quant == '1',
+            "LOAD_IN_4BIT": quant == '2'
+        }
+    elif choice == 'b':
+        config_updates = {
+            "USE_ALTERNATIVE_MODEL": True,
+            "USE_API": False
+        }
+    else:
+        api_key = input("Enter your API key: ")
+        config_updates = {
+            "USE_API": True,
+            "API_KEY": api_key
+        }
+    
+    print("\n2. Dataset Options:")
+    use_streaming = input("Use streaming? (y/n): ").lower() == 'y'
+    
+    if use_streaming:
+        subset_size = input("Process how many samples? (enter number or 'all'): ")
+        config_updates["USE_STREAMING"] = True
+        if subset_size != 'all':
+            config_updates["USE_SUBSET"] = True
+            config_updates["SUBSET_SIZE"] = int(subset_size)
+    
+    # Save configuration
+    print("\nConfiguration summary:")
+    for k, v in config_updates.items():
+        print(f"  {k}: {v}")
+    
+    save = input("\nSave configuration? (y/n): ").lower() == 'y'
+    if save:
+        # Would update the config file here
+        print("Configuration saved! (Note: In real implementation, would update config_lite.py)")
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description="GLOBE_V2 + Qwen2-Audio Processing")
+    parser = argparse.ArgumentParser(
+        description="GLOBE_V2 Lightweight Voice Description Pipeline"
+    )
     
     subparsers = parser.add_subparsers(dest='command', help='Commands')
     
-    # Test command
-    test_parser = subparsers.add_parser('test', help='Test on a few samples')
+    # Commands
+    test_parser = subparsers.add_parser('test', help='Test processing')
     test_parser.add_argument('--samples', type=int, default=2, help='Number of test samples')
     
-    # Process command
     process_parser = subparsers.add_parser('process', help='Process dataset')
-    process_parser.add_argument('--start', type=int, default=0, help='Start index')
-    process_parser.add_argument('--end', type=int, default=None, help='End index')
-    process_parser.add_argument('--no-resume', action='store_true', help='Start fresh, ignore checkpoint')
+    process_parser.add_argument('--max', type=int, help='Maximum samples to process')
+    process_parser.add_argument('--no-resume', action='store_true', help='Start fresh')
     
-    # Analyze command
-    analyze_parser = subparsers.add_parser('analyze', help='Analyze processed data')
+    analyze_parser = subparsers.add_parser('analyze', help='Analyze results')
     
-    # Export command
-    export_parser = subparsers.add_parser('export', help='Export for training')
-    export_parser.add_argument('--format', choices=['instruction', 'conversation'], 
-                              default='instruction', help='Export format')
+    config_parser = subparsers.add_parser('configure', help='Interactive configuration')
+    
+    info_parser = subparsers.add_parser('info', help='Show current configuration')
     
     args = parser.parse_args()
     
@@ -154,15 +194,27 @@ def main():
     
     try:
         if args.command == 'test':
-            test_processing(args.samples)
+            run_test(args.samples)
         elif args.command == 'process':
-            process_full_dataset(args.start, args.end, not args.no_resume)
+            run_processing(args.max, not args.no_resume)
         elif args.command == 'analyze':
-            analyze_results()
-        elif args.command == 'export':
-            export_data(args.format)
+            analyze()
+        elif args.command == 'configure':
+            configure()
+        elif args.command == 'info':
+            show_configuration()
         else:
             parser.print_help()
+            print("\n" + "="*50)
+            print("QUICK START:")
+            print("="*50)
+            print("1. Check configuration: python main_lite.py info")
+            print("2. Run test: python main_lite.py test")
+            print("3. Process dataset: python main_lite.py process")
+            print("4. Analyze results: python main_lite.py analyze")
+            
+    except KeyboardInterrupt:
+        logger.info("\nProcessing interrupted by user")
     except Exception as e:
         logger.error(f"Error: {str(e)}")
         raise

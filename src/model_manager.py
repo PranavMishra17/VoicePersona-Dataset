@@ -1,202 +1,302 @@
 """
-Model manager for Qwen2-Audio with GPU optimization and error handling
+Lightweight model manager with multiple backend options
 """
 import torch
 import librosa
 import logging
 import gc
-from typing import Optional, Tuple
-from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
-from contextlib import contextmanager
+import json
+from typing import Optional, Dict, Any
 import numpy as np
-
-from config import (
-    MODEL_NAME, DEVICE, MAX_AUDIO_LENGTH, MIXED_PRECISION,
-    MAX_NEW_TOKENS, TEMPERATURE, TOP_P, DO_SAMPLE
-)
+from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
-class Qwen2AudioManager:
-    """Manages Qwen2-Audio model with GPU optimization"""
+class AudioAnalyzerBase(ABC):
+    """Base class for audio analyzers"""
     
-    def __init__(self, model_name: str = MODEL_NAME, device: str = DEVICE):
-        self.model_name = model_name
-        self.device = device
+    @abstractmethod
+    def analyze(self, audio_path: str, prompt: str) -> str:
+        pass
+    
+    @abstractmethod
+    def cleanup(self):
+        pass
+
+class Qwen2AudioLite(AudioAnalyzerBase):
+    """Lightweight Qwen2-Audio with quantization"""
+    
+    def __init__(self, config):
+        self.config = config
         self.model = None
         self.processor = None
-        self.dtype = torch.float16 if device == "cuda" and MIXED_PRECISION else torch.float32
         
     def load_model(self):
-        """Load model with error handling and GPU optimization"""
+        """Load model with quantization"""
         try:
-            logger.info(f"Loading Qwen2-Audio model: {self.model_name}")
-            logger.info(f"Using device: {self.device}")
+            from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
+            
+            logger.info(f"Loading Qwen2-Audio with quantization...")
+            
+            # Quantization config
+            quantization_config = None
+            if self.config.LOAD_IN_8BIT or self.config.LOAD_IN_4BIT:
+                quantization_config = BitsAndBytesConfig(
+                    load_in_8bit=self.config.LOAD_IN_8BIT,
+                    load_in_4bit=self.config.LOAD_IN_4BIT,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                )
             
             # Load processor
-            self.processor = AutoProcessor.from_pretrained(self.model_name)
-            
-            # Load model with GPU optimizations
-            model_kwargs = {
-                "torch_dtype": self.dtype,
-                "device_map": "auto" if self.device == "cuda" else None
-            }
-            
-            if self.device == "cuda":
-                # Enable flash attention if available
-                try:
-                    model_kwargs["use_flash_attention_2"] = True
-                except:
-                    logger.warning("Flash Attention 2 not available")
-            
-            self.model = Qwen2AudioForConditionalGeneration.from_pretrained(
-                self.model_name,
-                **model_kwargs
+            self.processor = AutoProcessor.from_pretrained(
+                self.config.MODEL_NAME,
+                cache_dir=self.config.CACHE_DIR
             )
             
-            if self.device == "cuda":
-                self.model = self.model.cuda()
-                logger.info(f"Model loaded on GPU: {torch.cuda.get_device_name(0)}")
-                logger.info(f"GPU Memory allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+            # Load model with quantization
+            self.model = Qwen2AudioForConditionalGeneration.from_pretrained(
+                self.config.MODEL_NAME,
+                quantization_config=quantization_config,
+                device_map="auto",
+                torch_dtype=torch.float16,
+                cache_dir=self.config.CACHE_DIR,
+                low_cpu_mem_usage=True
+            )
             
-            # Set to evaluation mode
-            self.model.eval()
+            logger.info("Model loaded with quantization!")
             
-            logger.info("Model loaded successfully!")
-            
+        except ImportError:
+            logger.error("bitsandbytes not installed. Run: pip install bitsandbytes")
+            raise
         except Exception as e:
             logger.error(f"Failed to load model: {str(e)}")
             raise
     
-    @contextmanager
-    def cuda_amp_context(self):
-        """Context manager for automatic mixed precision"""
-        if self.device == "cuda" and MIXED_PRECISION:
-            with torch.cuda.amp.autocast():
-                yield
-        else:
-            yield
-    
-    def preprocess_audio(self, audio_path: str) -> Tuple[np.ndarray, int]:
-        """Load and preprocess audio with error handling"""
+    def analyze(self, audio_path: str, prompt: str) -> str:
+        """Analyze audio with the model"""
         try:
-            # Load audio with librosa
-            audio, sr = librosa.load(
-                audio_path, 
-                sr=self.processor.feature_extractor.sampling_rate
-            )
+            # Load audio
+            audio, sr = librosa.load(audio_path, sr=16000)
             
-            # Clip to maximum length
-            max_samples = int(MAX_AUDIO_LENGTH * sr)
+            # Clip to max length
+            max_samples = int(self.config.MAX_AUDIO_LENGTH * sr)
             if len(audio) > max_samples:
-                logger.warning(f"Audio clipped from {len(audio)/sr:.2f}s to {MAX_AUDIO_LENGTH}s")
                 audio = audio[:max_samples]
             
-            # Normalize audio
-            if np.abs(audio).max() > 0:
-                audio = audio / np.abs(audio).max()
+            # Process
+            inputs = self.processor(text=prompt, audios=audio, return_tensors="pt")
             
-            return audio, sr
+            # Generate
+            with torch.no_grad():
+                with torch.cuda.amp.autocast():
+                    outputs = self.model.generate(
+                        **inputs,
+                        max_new_tokens=self.config.MAX_NEW_TOKENS,
+                        temperature=self.config.TEMPERATURE,
+                        do_sample=self.config.DO_SAMPLE,
+                        top_p=self.config.TOP_P
+                    )
+            
+            # Decode
+            response = self.processor.batch_decode(
+                outputs[:, inputs.input_ids.size(1):],
+                skip_special_tokens=True
+            )[0]
+            
+            return response.strip()
             
         except Exception as e:
-            logger.error(f"Error preprocessing audio: {str(e)}")
-            raise
-    
-    def generate_description(self, audio_path: str, prompt: str, 
-                           max_retries: int = 3) -> str:
-        """Generate description with error handling and retries"""
-        if self.model is None:
-            raise RuntimeError("Model not loaded. Call load_model() first.")
-        
-        for attempt in range(max_retries):
-            try:
-                # Load and preprocess audio
-                audio, sr = self.preprocess_audio(audio_path)
-                
-                # Process inputs
-                inputs = self.processor(
-                    text=prompt, 
-                    audios=audio, 
-                    return_tensors="pt"
-                )
-                
-                # Move to device
-                if self.device == "cuda":
-                    inputs = {k: v.cuda() for k, v in inputs.items()}
-                
-                # Generate with mixed precision
-                with torch.no_grad():
-                    with self.cuda_amp_context():
-                        generated_ids = self.model.generate(
-                            **inputs,
-                            max_new_tokens=MAX_NEW_TOKENS,
-                            temperature=TEMPERATURE,
-                            do_sample=DO_SAMPLE,
-                            top_p=TOP_P,
-                            pad_token_id=self.processor.tokenizer.pad_token_id,
-                            eos_token_id=self.processor.tokenizer.eos_token_id
-                        )
-                
-                # Decode response
-                generated_ids = generated_ids[:, inputs.input_ids.size(1):]
-                response = self.processor.batch_decode(
-                    generated_ids,
-                    skip_special_tokens=True,
-                    clean_up_tokenization_spaces=False
-                )[0]
-                
-                return response.strip()
-                
-            except torch.cuda.OutOfMemoryError:
-                logger.error("GPU OOM error. Clearing cache and retrying...")
-                torch.cuda.empty_cache()
-                gc.collect()
-                if attempt == max_retries - 1:
-                    raise
-                    
-            except Exception as e:
-                logger.error(f"Generation error (attempt {attempt + 1}/{max_retries}): {str(e)}")
-                if attempt == max_retries - 1:
-                    raise
-    
-    def batch_generate(self, audio_paths: list, prompt: str) -> list:
-        """Generate descriptions for multiple audio files"""
-        results = []
-        for path in audio_paths:
-            try:
-                desc = self.generate_description(path, prompt)
-                results.append(desc)
-            except Exception as e:
-                logger.error(f"Failed to process {path}: {str(e)}")
-                results.append(f"Error: {str(e)}")
-        return results
-    
-    def get_memory_usage(self) -> dict:
-        """Get current memory usage"""
-        if self.device == "cuda":
-            return {
-                "allocated": f"{torch.cuda.memory_allocated() / 1e9:.2f} GB",
-                "reserved": f"{torch.cuda.memory_reserved() / 1e9:.2f} GB",
-                "free": f"{(torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()) / 1e9:.2f} GB"
-            }
-        return {"device": "cpu"}
+            logger.error(f"Analysis failed: {str(e)}")
+            return f"Error: {str(e)}"
     
     def cleanup(self):
-        """Clean up model and free memory"""
-        logger.info("Cleaning up model...")
-        
+        """Clean up resources"""
         if self.model:
             del self.model
-            self.model = None
-            
         if self.processor:
             del self.processor
-            self.processor = None
-            
         gc.collect()
+        torch.cuda.empty_cache()
+
+class WhisperAnalyzer(AudioAnalyzerBase):
+    """Use Whisper for transcription + LLM for analysis"""
+    
+    def __init__(self, config):
+        self.config = config
+        self.model = None
+        self.processor = None
         
-        if self.device == "cuda":
+    def load_model(self):
+        """Load Whisper model"""
+        try:
+            from transformers import WhisperProcessor, WhisperForConditionalGeneration
+            
+            logger.info("Loading Whisper model...")
+            
+            self.processor = WhisperProcessor.from_pretrained(
+                "openai/whisper-base",  # Use base model (74M params)
+                cache_dir=self.config.CACHE_DIR
+            )
+            
+            self.model = WhisperForConditionalGeneration.from_pretrained(
+                "openai/whisper-base",
+                cache_dir=self.config.CACHE_DIR,
+                torch_dtype=torch.float16 if self.config.DEVICE == "cuda" else torch.float32,
+                low_cpu_mem_usage=True
+            )
+            
+            if self.config.DEVICE == "cuda":
+                self.model = self.model.cuda()
+            
+            logger.info("Whisper model loaded!")
+            
+        except Exception as e:
+            logger.error(f"Failed to load Whisper: {str(e)}")
+            raise
+    
+    def analyze(self, audio_path: str, prompt: str) -> str:
+        """Transcribe and analyze"""
+        try:
+            # Load audio
+            audio, sr = librosa.load(audio_path, sr=16000)
+            
+            # Transcribe
+            inputs = self.processor(audio, sampling_rate=sr, return_tensors="pt")
+            if self.config.DEVICE == "cuda":
+                inputs = {k: v.cuda() for k, v in inputs.items()}
+            
+            with torch.no_grad():
+                predicted_ids = self.model.generate(inputs["input_features"])
+            
+            transcription = self.processor.batch_decode(
+                predicted_ids, 
+                skip_special_tokens=True
+            )[0]
+            
+            # Create basic analysis based on audio features
+            # This is a simplified analysis - you could add more sophisticated analysis
+            analysis = self._analyze_audio_features(audio, sr, transcription)
+            
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"Whisper analysis failed: {str(e)}")
+            return f"Error: {str(e)}"
+    
+    def _analyze_audio_features(self, audio: np.ndarray, sr: int, 
+                               transcription: str) -> str:
+        """Basic audio feature analysis"""
+        # Calculate basic features
+        duration = len(audio) / sr
+        
+        # Estimate pitch (very basic)
+        from scipy import signal
+        f0 = np.mean(librosa.yin(audio, fmin=50, fmax=400))
+        
+        # Energy
+        energy = np.mean(librosa.feature.rms(y=audio))
+        
+        # Speaking rate (words per minute)
+        word_count = len(transcription.split())
+        speaking_rate = (word_count / duration) * 60 if duration > 0 else 0
+        
+        # Create description
+        pitch_desc = "high-pitched" if f0 > 180 else "low-pitched" if f0 < 120 else "medium-pitched"
+        energy_desc = "energetic" if energy > 0.1 else "calm" if energy < 0.05 else "moderate"
+        rate_desc = "fast" if speaking_rate > 180 else "slow" if speaking_rate < 120 else "moderate"
+        
+        analysis = f"""Voice Analysis:
+The speaker has a {pitch_desc} voice with {energy_desc} delivery. 
+Speaking rate is {rate_desc} at approximately {speaking_rate:.0f} words per minute.
+Duration: {duration:.1f} seconds.
+
+Transcript: {transcription}
+
+Character/Persona:
+Based on the vocal characteristics, this voice would suit a {self._suggest_character(pitch_desc, energy_desc, rate_desc)}.
+"""
+        return analysis
+    
+    def _suggest_character(self, pitch: str, energy: str, rate: str) -> str:
+        """Suggest character based on features"""
+        suggestions = {
+            ("high-pitched", "energetic", "fast"): "young, enthusiastic character or excited narrator",
+            ("low-pitched", "calm", "slow"): "wise elder, meditation guide, or authoritative figure",
+            ("medium-pitched", "moderate", "moderate"): "professional presenter, teacher, or everyday character",
+            # Add more combinations
+        }
+        
+        key = (pitch, energy, rate)
+        return suggestions.get(key, "versatile character suitable for various roles")
+    
+    def cleanup(self):
+        """Clean up resources"""
+        if self.model:
+            del self.model
+        if self.processor:
+            del self.processor
+        gc.collect()
+        if self.config.DEVICE == "cuda":
             torch.cuda.empty_cache()
-            logger.info("GPU memory cleared")
+
+class APIAnalyzer(AudioAnalyzerBase):
+    """Use API services for analysis"""
+    
+    def __init__(self, config):
+        self.config = config
+        self.api_key = config.API_KEY
         
-        logger.info("Cleanup complete")
+    def load_model(self):
+        """Initialize API client"""
+        if not self.api_key:
+            raise ValueError("API_KEY not set in environment variables")
+        logger.info(f"Using {self.config.API_PROVIDER} API for analysis")
+    
+    def analyze(self, audio_path: str, prompt: str) -> str:
+        """Analyze using API"""
+        # This is a placeholder - implement based on your preferred API
+        # Options: OpenAI Whisper API, Google Speech-to-Text, Azure Cognitive Services
+        
+        if self.config.API_PROVIDER == "openai":
+            return self._analyze_openai(audio_path, prompt)
+        else:
+            return "API analysis not implemented"
+    
+    def _analyze_openai(self, audio_path: str, prompt: str) -> str:
+        """Use OpenAI API"""
+        try:
+            import openai
+            openai.api_key = self.api_key
+            
+            # Transcribe with Whisper API
+            with open(audio_path, "rb") as audio_file:
+                transcript = openai.Audio.transcribe("whisper-1", audio_file)
+            
+            # Analyze with GPT
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are an expert voice analyst."},
+                    {"role": "user", "content": f"Based on this transcript, provide a voice analysis: {transcript.text}"}
+                ]
+            )
+            
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            logger.error(f"API analysis failed: {str(e)}")
+            return f"Error: {str(e)}"
+    
+    def cleanup(self):
+        """No cleanup needed for API"""
+        pass
+
+def create_analyzer(config) -> AudioAnalyzerBase:
+    """Factory function to create appropriate analyzer"""
+    if config.USE_API:
+        return APIAnalyzer(config)
+    elif config.USE_ALTERNATIVE_MODEL:
+        return WhisperAnalyzer(config)
+    else:
+        return Qwen2AudioLite(config)

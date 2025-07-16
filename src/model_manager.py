@@ -23,7 +23,7 @@ class AudioAnalyzerBase(ABC):
     def cleanup(self):
         pass
 
-class Qwen2AudioLite(AudioAnalyzerBase):
+class Qwen2AudioManager(AudioAnalyzerBase):
     """Lightweight Qwen2-Audio with quantization"""
     
     def __init__(self, config):
@@ -38,14 +38,18 @@ class Qwen2AudioLite(AudioAnalyzerBase):
             
             logger.info(f"Loading Qwen2-Audio with quantization...")
             
-            # Quantization config
+            # Quantization config with CPU offloading
             quantization_config = None
             if self.config.LOAD_IN_8BIT or self.config.LOAD_IN_4BIT:
+                quant_kwargs = {}
+                if self.config.LOAD_IN_4BIT:
+                    quant_kwargs["bnb_4bit_quant_type"] = "nf4"
+                    quant_kwargs["bnb_4bit_use_double_quant"] = True
+                    quant_kwargs["bnb_4bit_compute_dtype"] = torch.float16
                 quantization_config = BitsAndBytesConfig(
-                    load_in_8bit=self.config.LOAD_IN_8BIT,
                     load_in_4bit=self.config.LOAD_IN_4BIT,
-                    bnb_4bit_compute_dtype=torch.float16,
-                    bnb_4bit_use_double_quant=True,
+                    load_in_8bit=self.config.LOAD_IN_8BIT,
+                    **quant_kwargs
                 )
             
             # Load processor
@@ -61,7 +65,8 @@ class Qwen2AudioLite(AudioAnalyzerBase):
                 device_map="auto",
                 torch_dtype=torch.float16,
                 cache_dir=self.config.CACHE_DIR,
-                low_cpu_mem_usage=True
+                low_cpu_mem_usage=True,
+                max_memory={0: "5.5GB", "cpu": "16GB"}  # Leave some VRAM for processing
             )
             
             logger.info("Model loaded with quantization!")
@@ -299,4 +304,4 @@ def create_analyzer(config) -> AudioAnalyzerBase:
     elif config.USE_ALTERNATIVE_MODEL:
         return WhisperAnalyzer(config)
     else:
-        return Qwen2AudioLite(config)
+        return Qwen2AudioManager(config)

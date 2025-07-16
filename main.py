@@ -15,8 +15,11 @@ from config import (
     USE_ALTERNATIVE_MODEL, MODEL_NAME, OUTPUT_JSON
 )
 import config as config
-from dataset_processor import GlobeV2StreamProcessor, test_processing
+from dataset_processor import GlobeV2Processor
 from utils import analyze_processed_dataset, sample_descriptions
+
+# Import or define test_processing
+from dataset_processor import test_processing
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +61,7 @@ def run_processing(max_samples: int = None, resume: bool = True):
         if response.lower() != 'y':
             return
     
-    processor = GlobeV2StreamProcessor(config)
+    processor = GlobeV2Processor(config)
     
     # Determine max samples
     if max_samples is None and USE_SUBSET:

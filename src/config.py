@@ -26,8 +26,8 @@ os.environ['HF_DATASETS_CACHE'] = str(CACHE_DIR / "datasets")
 # ========== MODEL OPTIONS ==========
 # Option 1: Use Qwen2-Audio with quantization (requires ~4GB instead of 14GB)
 USE_QUANTIZATION = True
-LOAD_IN_8BIT = True  # Reduces memory by ~50%
-LOAD_IN_4BIT = False  # Reduces memory by ~75% but may affect quality
+LOAD_IN_8BIT = False  # Reduces memory by ~50% but still too large for 6GB VRAM
+LOAD_IN_4BIT = True  # Reduces memory by ~75% - fits in 6GB VRAM
 
 # Option 2: Use alternative smaller models
 USE_ALTERNATIVE_MODEL = False

@@ -1,5 +1,5 @@
 """
-Lightweight model manager with multiple backend options
+Lightweight model manager with multiple backend options and quantization fallback
 """
 import torch
 import librosa
@@ -24,59 +24,118 @@ class AudioAnalyzerBase(ABC):
         pass
 
 class Qwen2AudioManager(AudioAnalyzerBase):
-    """Lightweight Qwen2-Audio with quantization"""
+    """Qwen2-Audio manager with quantization fallback"""
     
     def __init__(self, config):
         self.config = config
         self.model = None
         self.processor = None
+        self.quantization_used = False
         
     def load_model(self):
-        """Load model with quantization"""
+        """Load model with fallback to quantization if needed"""
         try:
-            from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
+            from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
             
-            logger.info(f"Loading Qwen2-Audio with quantization...")
-            
-            # Quantization config with CPU offloading
-            quantization_config = None
-            if self.config.LOAD_IN_8BIT or self.config.LOAD_IN_4BIT:
-                quant_kwargs = {}
-                if self.config.LOAD_IN_4BIT:
-                    quant_kwargs["bnb_4bit_quant_type"] = "nf4"
-                    quant_kwargs["bnb_4bit_use_double_quant"] = True
-                    quant_kwargs["bnb_4bit_compute_dtype"] = torch.float16
-                quantization_config = BitsAndBytesConfig(
-                    load_in_4bit=self.config.LOAD_IN_4BIT,
-                    load_in_8bit=self.config.LOAD_IN_8BIT,
-                    **quant_kwargs
-                )
-            
-            # Load processor
+            # Load processor first (always works)
+            logger.info("Loading Qwen2-Audio processor...")
             self.processor = AutoProcessor.from_pretrained(
                 self.config.MODEL_NAME,
                 cache_dir=self.config.CACHE_DIR
             )
+            logger.info("Processor loaded successfully!")
             
-            # Load model with quantization
-            self.model = Qwen2AudioForConditionalGeneration.from_pretrained(
-                self.config.MODEL_NAME,
-                quantization_config=quantization_config,
-                device_map="auto",
-                torch_dtype=torch.float16,
-                cache_dir=self.config.CACHE_DIR,
-                low_cpu_mem_usage=True,
-                max_memory={0: "5.5GB", "cpu": "16GB"}  # Leave some VRAM for processing
-            )
+            # Try to load model without quantization first
+            if not self.config.USE_QUANTIZATION:
+                logger.info("Attempting to load model without quantization...")
+                try:
+                    self.model = self._load_model_normal()
+                    logger.info("Model loaded successfully without quantization!")
+                    return
+                except Exception as e:
+                    logger.warning(f"Failed to load without quantization: {str(e)}")
+                    if self.config.ENABLE_QUANTIZATION_FALLBACK:
+                        logger.info("Falling back to quantization...")
+                    else:
+                        raise e
             
-            logger.info("Model loaded with quantization!")
-            
-        except ImportError:
-            logger.error("bitsandbytes not installed. Run: pip install bitsandbytes")
-            raise
+            # If quantization is enabled or fallback is needed
+            if self.config.USE_QUANTIZATION or self.config.ENABLE_QUANTIZATION_FALLBACK:
+                logger.info("Loading model with quantization...")
+                self.model = self._load_model_quantized()
+                self.quantization_used = True
+                logger.info("Model loaded successfully with quantization!")
+                
+        except ImportError as e:
+            if "bitsandbytes" in str(e):
+                logger.error("bitsandbytes not installed. For quantization support, run: pip install bitsandbytes")
+                # Try loading without quantization
+                if not self.config.USE_QUANTIZATION:
+                    logger.info("Attempting to load without quantization...")
+                    self.model = self._load_model_normal()
+                else:
+                    raise
+            else:
+                raise
         except Exception as e:
             logger.error(f"Failed to load model: {str(e)}")
             raise
+    
+    def _load_model_normal(self):
+        """Load model without quantization"""
+        from transformers import Qwen2AudioForConditionalGeneration
+        
+        return Qwen2AudioForConditionalGeneration.from_pretrained(
+            self.config.MODEL_NAME,
+            device_map="auto",
+            torch_dtype=torch.float16 if self.config.DEVICE == "cuda" else torch.float32,
+            cache_dir=self.config.CACHE_DIR,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True
+        )
+    
+    def _load_model_quantized(self):
+        """Load model with quantization (fallback method)"""
+        from transformers import Qwen2AudioForConditionalGeneration, BitsAndBytesConfig
+        
+        # Determine quantization type
+        use_4bit = self.config.LOAD_IN_4BIT or (
+            self.config.ENABLE_QUANTIZATION_FALLBACK and self.config.FALLBACK_4BIT
+        )
+        use_8bit = self.config.LOAD_IN_8BIT or (
+            not use_4bit and self.config.ENABLE_QUANTIZATION_FALLBACK and self.config.FALLBACK_8BIT
+        )
+        
+        if not (use_4bit or use_8bit):
+            use_4bit = True  # Default fallback
+            
+        logger.info(f"Using {'4-bit' if use_4bit else '8-bit'} quantization")
+        
+        # Quantization config
+        quant_kwargs = {
+            "load_in_4bit": use_4bit,
+            "load_in_8bit": use_8bit and not use_4bit,
+        }
+        
+        if use_4bit:
+            quant_kwargs.update({
+                "bnb_4bit_quant_type": "nf4",
+                "bnb_4bit_use_double_quant": True,
+                "bnb_4bit_compute_dtype": torch.float16,
+                "llm_int8_enable_fp32_cpu_offload": False  # Keep on GPU only
+            })
+        
+        quantization_config = BitsAndBytesConfig(**quant_kwargs)
+        
+        return Qwen2AudioForConditionalGeneration.from_pretrained(
+            self.config.MODEL_NAME,
+            quantization_config=quantization_config,
+            device_map={"": 0},  # Keep everything on GPU 0
+            torch_dtype=torch.float16,
+            cache_dir=self.config.CACHE_DIR,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True
+        )
     
     def analyze(self, audio_path: str, prompt: str) -> str:
         """Analyze audio with the model"""
@@ -89,23 +148,44 @@ class Qwen2AudioManager(AudioAnalyzerBase):
             if len(audio) > max_samples:
                 audio = audio[:max_samples]
             
-            # Process
-            inputs = self.processor(text=prompt, audios=audio, return_tensors="pt")
+            # Process with explicit sampling rate
+            inputs = self.processor(
+                text=prompt, 
+                audios=audio, 
+                sampling_rate=16000,
+                return_tensors="pt"
+            )
+            
+            # Move to device
+            if self.config.DEVICE == "cuda":
+                inputs = {k: v.cuda() if torch.is_tensor(v) else v for k, v in inputs.items()}
             
             # Generate
             with torch.no_grad():
-                with torch.cuda.amp.autocast():
+                if self.config.MIXED_PRECISION and self.config.DEVICE == "cuda":
+                    with torch.amp.autocast('cuda'):
+                        outputs = self.model.generate(
+                            **inputs,
+                            max_new_tokens=self.config.MAX_NEW_TOKENS,
+                            temperature=self.config.TEMPERATURE,
+                            do_sample=self.config.DO_SAMPLE,
+                            top_p=self.config.TOP_P,
+                            pad_token_id=self.processor.tokenizer.eos_token_id if hasattr(self.processor, 'tokenizer') else None
+                        )
+                else:
                     outputs = self.model.generate(
                         **inputs,
                         max_new_tokens=self.config.MAX_NEW_TOKENS,
                         temperature=self.config.TEMPERATURE,
                         do_sample=self.config.DO_SAMPLE,
-                        top_p=self.config.TOP_P
+                        top_p=self.config.TOP_P,
+                        pad_token_id=self.processor.tokenizer.eos_token_id if hasattr(self.processor, 'tokenizer') else None
                     )
             
-            # Decode
+            # Decode - fix the input_ids access
+            input_length = inputs['input_ids'].size(1) if 'input_ids' in inputs else 0
             response = self.processor.batch_decode(
-                outputs[:, inputs.input_ids.size(1):],
+                outputs[:, input_length:],
                 skip_special_tokens=True
             )[0]
             
@@ -115,6 +195,10 @@ class Qwen2AudioManager(AudioAnalyzerBase):
             logger.error(f"Analysis failed: {str(e)}")
             return f"Error: {str(e)}"
     
+    def generate_description(self, audio_path: str, prompt: str) -> str:
+        """Generate description (alias for analyze method)"""
+        return self.analyze(audio_path, prompt)
+    
     def cleanup(self):
         """Clean up resources"""
         if self.model:
@@ -122,7 +206,8 @@ class Qwen2AudioManager(AudioAnalyzerBase):
         if self.processor:
             del self.processor
         gc.collect()
-        torch.cuda.empty_cache()
+        if self.config.DEVICE == "cuda":
+            torch.cuda.empty_cache()
 
 class WhisperAnalyzer(AudioAnalyzerBase):
     """Use Whisper for transcription + LLM for analysis"""
@@ -180,7 +265,6 @@ class WhisperAnalyzer(AudioAnalyzerBase):
             )[0]
             
             # Create basic analysis based on audio features
-            # This is a simplified analysis - you could add more sophisticated analysis
             analysis = self._analyze_audio_features(audio, sr, transcription)
             
             return analysis
@@ -189,6 +273,10 @@ class WhisperAnalyzer(AudioAnalyzerBase):
             logger.error(f"Whisper analysis failed: {str(e)}")
             return f"Error: {str(e)}"
     
+    def generate_description(self, audio_path: str, prompt: str) -> str:
+        """Generate description (alias for analyze method)"""
+        return self.analyze(audio_path, prompt)
+    
     def _analyze_audio_features(self, audio: np.ndarray, sr: int, 
                                transcription: str) -> str:
         """Basic audio feature analysis"""
@@ -196,8 +284,10 @@ class WhisperAnalyzer(AudioAnalyzerBase):
         duration = len(audio) / sr
         
         # Estimate pitch (very basic)
-        from scipy import signal
-        f0 = np.mean(librosa.yin(audio, fmin=50, fmax=400))
+        try:
+            f0 = np.mean(librosa.yin(audio, fmin=50, fmax=400))
+        except:
+            f0 = 150  # Default
         
         # Energy
         energy = np.mean(librosa.feature.rms(y=audio))
@@ -229,7 +319,6 @@ Based on the vocal characteristics, this voice would suit a {self._suggest_chara
             ("high-pitched", "energetic", "fast"): "young, enthusiastic character or excited narrator",
             ("low-pitched", "calm", "slow"): "wise elder, meditation guide, or authoritative figure",
             ("medium-pitched", "moderate", "moderate"): "professional presenter, teacher, or everyday character",
-            # Add more combinations
         }
         
         key = (pitch, energy, rate)
@@ -260,13 +349,14 @@ class APIAnalyzer(AudioAnalyzerBase):
     
     def analyze(self, audio_path: str, prompt: str) -> str:
         """Analyze using API"""
-        # This is a placeholder - implement based on your preferred API
-        # Options: OpenAI Whisper API, Google Speech-to-Text, Azure Cognitive Services
-        
         if self.config.API_PROVIDER == "openai":
             return self._analyze_openai(audio_path, prompt)
         else:
             return "API analysis not implemented"
+    
+    def generate_description(self, audio_path: str, prompt: str) -> str:
+        """Generate description (alias for analyze method)"""
+        return self.analyze(audio_path, prompt)
     
     def _analyze_openai(self, audio_path: str, prompt: str) -> str:
         """Use OpenAI API"""

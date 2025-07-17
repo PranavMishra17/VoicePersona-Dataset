@@ -12,7 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from config import (
     setup_logging, check_resources, get_disk_space,
     USE_STREAMING, USE_SUBSET, SUBSET_SIZE, USE_API,
-    USE_ALTERNATIVE_MODEL, MODEL_NAME, OUTPUT_JSON
+    USE_ALTERNATIVE_MODEL, MODEL_NAME, OUTPUT_JSON,
+    USE_QUANTIZATION, ENABLE_QUANTIZATION_FALLBACK
 )
 import config as config
 from dataset_processor import GlobeV2Processor
@@ -33,7 +34,11 @@ def show_configuration():
     print(f"Subset: {USE_SUBSET} (size: {SUBSET_SIZE if USE_SUBSET else 'full'})")
     print(f"Using API: {USE_API}")
     print(f"Alternative model: {USE_ALTERNATIVE_MODEL}")
-    print(f"Quantization: 8-bit={config.LOAD_IN_8BIT}, 4-bit={config.LOAD_IN_4BIT}")
+    print(f"Quantization: {'ENABLED' if USE_QUANTIZATION else 'DISABLED'}")
+    print(f"Quantization fallback: {'ENABLED' if ENABLE_QUANTIZATION_FALLBACK else 'DISABLED'}")
+    if ENABLE_QUANTIZATION_FALLBACK:
+        print(f"  - 4-bit fallback: {config.FALLBACK_4BIT}")
+        print(f"  - 8-bit fallback: {config.FALLBACK_8BIT}")
     
     disk = get_disk_space()
     print(f"\nDisk space: {disk['free_gb']:.1f} GB free")
@@ -63,6 +68,9 @@ def run_processing(max_samples: int = None, resume: bool = True):
     
     processor = GlobeV2Processor(config)
     
+    # Load dataset
+    processor.load_dataset()
+    
     # Determine max samples
     if max_samples is None and USE_SUBSET:
         max_samples = SUBSET_SIZE
@@ -70,13 +78,12 @@ def run_processing(max_samples: int = None, resume: bool = True):
     logger.info(f"Starting processing (max samples: {max_samples or 'unlimited'})...")
     
     # Process
-    processed = processor.process_streaming(max_samples=max_samples)
+    processed = processor.process_dataset(start_idx=0, end_idx=max_samples, resume=resume)
     
-    # Convert to HF dataset if needed
-    if OUTPUT_JSON.exists():
-        processor.convert_to_hf_dataset(OUTPUT_JSON)
+    # Save results
+    processor.save_results()
     
-    logger.info(f"Processing completed. Total processed: {processed}")
+    logger.info(f"Processing completed. Total processed: {len(processed)}")
 
 def analyze():
     """Analyze processed data"""
@@ -84,16 +91,31 @@ def analyze():
         logger.error(f"No output file found at {OUTPUT_JSON}")
         return
     
-    # Convert JSONL to JSON for analysis
+    # Handle both JSON and JSONL formats
     import jsonlines
-    data = []
-    with jsonlines.open(OUTPUT_JSON) as reader:
-        for obj in reader:
-            data.append(obj)
-    
-    # Save as JSON for analysis functions
-    temp_json = OUTPUT_JSON.with_suffix('.json')
     import json
+    
+    data = []
+    try:
+        # Try JSONL first
+        with jsonlines.open(OUTPUT_JSON) as reader:
+            for obj in reader:
+                data.append(obj)
+    except:
+        # Fall back to JSON
+        try:
+            with open(OUTPUT_JSON, 'r') as f:
+                data = json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load output file: {e}")
+            return
+    
+    if not data:
+        logger.error("No data found in output file")
+        return
+    
+    # Save as JSON for analysis functions if needed
+    temp_json = OUTPUT_JSON.with_suffix('.json')
     with open(temp_json, 'w') as f:
         json.dump(data, f)
     
@@ -117,26 +139,34 @@ def configure():
     print("="*50)
     
     print("\n1. Model Selection:")
-    print("   a) Qwen2-Audio with quantization (4-6 GB)")
-    print("   b) Whisper + analysis (1-2 GB)")
-    print("   c) API-based (no local model)")
+    print("   a) Qwen2-Audio (no quantization by default)")
+    print("   b) Qwen2-Audio with quantization enabled")
+    print("   c) Whisper + analysis (1-2 GB)")
+    print("   d) API-based (no local model)")
     
-    choice = input("\nSelect option (a/b/c): ").lower()
+    choice = input("\nSelect option (a/b/c/d): ").lower()
     
     if choice == 'a':
+        config_updates = {
+            "USE_ALTERNATIVE_MODEL": False,
+            "USE_API": False,
+            "USE_QUANTIZATION": False,
+            "ENABLE_QUANTIZATION_FALLBACK": True
+        }
+    elif choice == 'b':
         print("\nQuantization level:")
         print("   1) 8-bit (better quality, ~7GB)")
         print("   2) 4-bit (lower quality, ~3.5GB)")
         quant = input("Select (1/2): ")
         
-        # Update config file
         config_updates = {
             "USE_ALTERNATIVE_MODEL": False,
             "USE_API": False,
+            "USE_QUANTIZATION": True,
             "LOAD_IN_8BIT": quant == '1',
             "LOAD_IN_4BIT": quant == '2'
         }
-    elif choice == 'b':
+    elif choice == 'c':
         config_updates = {
             "USE_ALTERNATIVE_MODEL": True,
             "USE_API": False
@@ -165,13 +195,12 @@ def configure():
     
     save = input("\nSave configuration? (y/n): ").lower() == 'y'
     if save:
-        # Would update the config file here
-        print("Configuration saved! (Note: In real implementation, would update config_lite.py)")
+        print("Configuration saved! (Note: In real implementation, would update config.py)")
 
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
-        description="GLOBE_V2 Lightweight Voice Description Pipeline"
+        description="GLOBE_V2 Voice Description Pipeline"
     )
     
     subparsers = parser.add_subparsers(dest='command', help='Commands')
@@ -211,10 +240,10 @@ def main():
             print("\n" + "="*50)
             print("QUICK START:")
             print("="*50)
-            print("1. Check configuration: python main_lite.py info")
-            print("2. Run test: python main_lite.py test")
-            print("3. Process dataset: python main_lite.py process")
-            print("4. Analyze results: python main_lite.py analyze")
+            print("1. Check configuration: python main.py info")
+            print("2. Run test: python main.py test")
+            print("3. Process dataset: python main.py process")
+            print("4. Analyze results: python main.py analyze")
             
     except KeyboardInterrupt:
         logger.info("\nProcessing interrupted by user")

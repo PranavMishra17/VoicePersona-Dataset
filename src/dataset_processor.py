@@ -47,7 +47,6 @@ class GlobeV2Processor:
         try:
             if hasattr(self.config, 'USE_STREAMING') and self.config.USE_STREAMING:
                 logger.info(f"Loading GLOBE_V2 dataset in streaming mode...")
-                # In streaming mode, do NOT use slicing in split
                 self.dataset = load_dataset(
                     self.config.DATASET_NAME,
                     split=split,
@@ -126,10 +125,9 @@ class GlobeV2Processor:
             except:
                 pass
     
-    def process_single_sample(self, idx: int) -> Optional[Dict[str, Any]]:
+    def process_single_sample(self, sample: Dict[str, Any], idx: int) -> Optional[Dict[str, Any]]:
         """Process a single sample with comprehensive error handling"""
         try:
-            sample = self.dataset[idx]
             logger.debug(f"Processing sample {idx}: {sample.get('speaker_id', 'unknown')}")
             
             # Extract audio data
@@ -195,12 +193,83 @@ class GlobeV2Processor:
             processed_data = []
             self.checkpoint_data['processed_data'] = processed_data
         
+        logger.info(f"Processing samples from {start_idx} to {end_idx if end_idx else 'end'}")
+        self.processing_start_time = datetime.now()
+        
+        # Handle streaming vs non-streaming datasets
+        if hasattr(self.config, 'USE_STREAMING') and self.config.USE_STREAMING:
+            processed_data = self._process_streaming_dataset(start_idx, end_idx, processed_data)
+        else:
+            processed_data = self._process_regular_dataset(start_idx, end_idx, processed_data)
+        
+        # Final save
+        self.save_checkpoint()
+        self.model_manager.cleanup()
+        
+        logger.info(f"Processing complete! Total processed: {len(processed_data)}")
+        return processed_data
+    
+    def _process_streaming_dataset(self, start_idx: int, end_idx: Optional[int], processed_data: List):
+        """Process streaming dataset"""
+        # Skip to start_idx for streaming dataset
+        dataset_iter = iter(self.dataset)
+        
+        # Skip samples before start_idx
+        for _ in range(start_idx):
+            try:
+                next(dataset_iter)
+            except StopIteration:
+                break
+        
+        # Process samples
+        idx = start_idx
+        samples_processed = 0
+        
+        with tqdm(desc="Processing") as pbar:
+            for sample in dataset_iter:
+                # Check if we've reached end_idx
+                if end_idx and idx >= end_idx:
+                    break
+                
+                # Skip if already processed
+                if idx in self.checkpoint_data['processed_indices']:
+                    idx += 1
+                    continue
+                
+                # Process sample
+                result = self.process_single_sample(sample, idx)
+                
+                if result:
+                    processed_data.append(result)
+                    self.checkpoint_data['processed_indices'].add(idx)
+                    self.checkpoint_data['last_index'] = idx
+                    samples_processed += 1
+                    
+                    # Update progress bar
+                    pbar.set_postfix({
+                        'idx': idx,
+                        'speaker': result.get('speaker_id', 'unknown')[:10],
+                        'gpu_mem': f"{torch.cuda.memory_allocated()/1e9:.1f}GB" if DEVICE == "cuda" else "CPU"
+                    })
+                    pbar.update(1)
+                
+                # Periodic operations
+                if (samples_processed + 1) % CHECKPOINT_INTERVAL == 0:
+                    self.save_checkpoint()
+                
+                if DEVICE == "cuda" and (samples_processed + 1) % CLEAR_CACHE_INTERVAL == 0:
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                
+                idx += 1
+                
+        return processed_data
+    
+    def _process_regular_dataset(self, start_idx: int, end_idx: Optional[int], processed_data: List):
+        """Process regular (non-streaming) dataset"""
         # Set end index
         if end_idx is None:
             end_idx = len(self.dataset)
-        
-        logger.info(f"Processing samples {start_idx} to {end_idx}")
-        self.processing_start_time = datetime.now()
         
         # Process with progress bar
         with tqdm(range(start_idx, end_idx), desc="Processing") as pbar:
@@ -209,8 +278,11 @@ class GlobeV2Processor:
                 if idx in self.checkpoint_data['processed_indices']:
                     continue
                 
+                # Get sample
+                sample = self.dataset[idx]
+                
                 # Process sample
-                result = self.process_single_sample(idx)
+                result = self.process_single_sample(sample, idx)
                 
                 if result:
                     processed_data.append(result)
@@ -231,11 +303,6 @@ class GlobeV2Processor:
                     torch.cuda.empty_cache()
                     gc.collect()
         
-        # Final save
-        self.save_checkpoint()
-        self.model_manager.cleanup()
-        
-        logger.info(f"Processing complete! Total processed: {len(processed_data)}")
         return processed_data
     
     def save_results(self, processed_data: Optional[List[Dict]] = None):
@@ -308,17 +375,10 @@ def test_processing(config, n_samples=2):
     import logging
     logger = logging.getLogger(__name__)
     processor = GlobeV2Processor(config)
-    # Load dataset (use subset if available)
-
+    
     try:
-        # For streaming, do not use slicing in split
-        if hasattr(config, 'USE_STREAMING') and config.USE_STREAMING:
-            split = "train"
-        elif hasattr(config, 'USE_SUBSET') and config.USE_SUBSET:
-            split = f"train[:{n_samples}]"
-        else:
-            split = "train"
-        processor.load_dataset(split=split)
+        # Load dataset
+        processor.load_dataset(split="train")
     except Exception as e:
         logger.error(f"Failed to load dataset for test: {str(e)}")
         return 0

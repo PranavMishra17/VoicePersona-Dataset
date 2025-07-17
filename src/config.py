@@ -24,10 +24,15 @@ os.environ['TRANSFORMERS_CACHE'] = str(CACHE_DIR / "transformers")
 os.environ['HF_DATASETS_CACHE'] = str(CACHE_DIR / "datasets")
 
 # ========== MODEL OPTIONS ==========
-# Option 1: Use Qwen2-Audio with quantization (requires ~4GB instead of 14GB)
-USE_QUANTIZATION = True
-LOAD_IN_8BIT = False  # Reduces memory by ~50% but still too large for 6GB VRAM
-LOAD_IN_4BIT = True  # Reduces memory by ~75% - fits in 6GB VRAM
+# Primary: Use Qwen2-Audio without quantization (for HPC with sufficient GPU memory)
+USE_QUANTIZATION = False  # Changed to False - quantization as backup only
+LOAD_IN_8BIT = False  # Backup option only
+LOAD_IN_4BIT = False  # Backup option only
+
+# Backup quantization settings (used if primary loading fails)
+ENABLE_QUANTIZATION_FALLBACK = True  # Set to False to disable fallback entirely
+FALLBACK_4BIT = True  # Try 4-bit quantization if normal loading fails
+FALLBACK_8BIT = False  # Try 8-bit quantization if 4-bit fails
 
 # Option 2: Use alternative smaller models
 USE_ALTERNATIVE_MODEL = False
@@ -135,10 +140,11 @@ def estimate_model_size():
     
     size = base_sizes.get(MODEL_NAME, 10_000)
     
-    if LOAD_IN_8BIT:
-        size = size * 0.5
-    elif LOAD_IN_4BIT:
-        size = size * 0.25
+    if USE_QUANTIZATION:
+        if LOAD_IN_8BIT:
+            size = size * 0.5
+        elif LOAD_IN_4BIT:
+            size = size * 0.25
         
     return size
 
@@ -151,12 +157,14 @@ def check_resources():
     print(f"Available disk space: {disk['free_gb']:.1f} GB")
     print(f"Estimated model size: {model_size_mb/1000:.1f} GB")
     print(f"Dataset streaming: {'ON' if USE_STREAMING else 'OFF'}")
+    print(f"Quantization: {'OFF' if not USE_QUANTIZATION else 'ON'}")
+    print(f"Quantization fallback: {'ON' if ENABLE_QUANTIZATION_FALLBACK else 'OFF'}")
     
     if disk['free_gb'] < (model_size_mb/1000 + 5):  # Need 5GB buffer
         print("WARNING: Low disk space! Consider:")
         print("- Set USE_STREAMING = True")
         print("- Set USE_SUBSET = True with smaller SUBSET_SIZE")
-        print("- Set LOAD_IN_8BIT = True or LOAD_IN_4BIT = True")
+        print("- Set ENABLE_QUANTIZATION_FALLBACK = True")
         print("- Use USE_API = True with an API key")
         return False
     

@@ -137,30 +137,75 @@ class Qwen2AudioManager(AudioAnalyzerBase):
             trust_remote_code=True
         )
     
-    def analyze(self, audio_path: str, prompt: str) -> str:
-        """Analyze audio with the model"""
+    def analyze(self, audio_path: str, prompt_text: str) -> str:
+        """Analyze audio with the model using ChatML format"""
         try:
+            logger.info(f"=== DEBUGGING ANALYSIS ===")
+            logger.info(f"Audio path: {audio_path}")
+            logger.info(f"Prompt text: {prompt_text[:100]}...")
+            
             # Load audio
             audio, sr = librosa.load(audio_path, sr=16000)
+            logger.info(f"Audio loaded - shape: {audio.shape}, sr: {sr}, duration: {len(audio)/sr:.2f}s")
+            logger.info(f"Audio stats - min: {audio.min():.4f}, max: {audio.max():.4f}, mean: {audio.mean():.4f}")
             
             # Clip to max length
             max_samples = int(self.config.MAX_AUDIO_LENGTH * sr)
             if len(audio) > max_samples:
                 audio = audio[:max_samples]
+                logger.info(f"Audio clipped to {len(audio)/sr:.2f}s")
             
-            # Process with explicit sampling rate
+            # Create conversation structure for ChatML format
+            conversation = [
+                {"role": "user", "content": [
+                    {"type": "audio", "audio_url": audio_path},
+                    {"type": "text", "text": prompt_text},
+                ]},
+            ]
+            
+            # Apply chat template
+            logger.info("Applying chat template...")
+            text = self.processor.apply_chat_template(
+                conversation, 
+                add_generation_prompt=True, 
+                tokenize=False
+            )
+            logger.info(f"Chat template result: {text[:200]}...")
+            
+            # Extract audios from conversation
+            audios = []
+            for message in conversation:
+                if isinstance(message["content"], list):
+                    for ele in message["content"]:
+                        if ele["type"] == "audio":
+                            audios.append(audio)
+            
+            logger.info(f"Number of audio clips: {len(audios)}")
+            
+            # Process with chat template
+            logger.info("Processing with chat template...")
             inputs = self.processor(
-                text=prompt, 
-                audios=audio, 
-                sampling_rate=16000,
+                text=text,
+                audios=audios,
                 return_tensors="pt"
             )
+            
+            logger.info(f"Processor inputs keys: {list(inputs.keys())}")
+            for key, value in inputs.items():
+                if torch.is_tensor(value):
+                    logger.info(f"  {key}: shape={value.shape}, dtype={value.dtype}")
+                else:
+                    logger.info(f"  {key}: {type(value)} - {str(value)[:100]}")
             
             # Move to device
             if self.config.DEVICE == "cuda":
                 inputs = {k: v.cuda() if torch.is_tensor(v) else v for k, v in inputs.items()}
+                logger.info("Moved inputs to CUDA")
             
-            # Generate
+            # Generate with better parameters
+            logger.info("Starting generation...")
+            logger.info(f"Generation params: max_tokens={self.config.MAX_NEW_TOKENS}, temp={self.config.TEMPERATURE}")
+            
             with torch.no_grad():
                 if self.config.MIXED_PRECISION and self.config.DEVICE == "cuda":
                     with torch.amp.autocast('cuda'):
@@ -168,31 +213,52 @@ class Qwen2AudioManager(AudioAnalyzerBase):
                             **inputs,
                             max_new_tokens=self.config.MAX_NEW_TOKENS,
                             temperature=self.config.TEMPERATURE,
-                            do_sample=self.config.DO_SAMPLE,
-                            top_p=self.config.TOP_P,
-                            pad_token_id=self.processor.tokenizer.eos_token_id if hasattr(self.processor, 'tokenizer') else None
+                            do_sample=True,
+                            top_p=0.8,
+                            repetition_penalty=1.05,
+                            pad_token_id=self.processor.tokenizer.eos_token_id,
                         )
                 else:
                     outputs = self.model.generate(
                         **inputs,
                         max_new_tokens=self.config.MAX_NEW_TOKENS,
                         temperature=self.config.TEMPERATURE,
-                        do_sample=self.config.DO_SAMPLE,
-                        top_p=self.config.TOP_P,
-                        pad_token_id=self.processor.tokenizer.eos_token_id if hasattr(self.processor, 'tokenizer') else None
+                        do_sample=True,
+                        top_p=0.8,
+                        repetition_penalty=1.05,
+                        pad_token_id=self.processor.tokenizer.eos_token_id,
                     )
             
-            # Decode - fix the input_ids access
-            input_length = inputs['input_ids'].size(1) if 'input_ids' in inputs else 0
+            logger.info(f"Generation complete - output shape: {outputs.shape}")
+            logger.info(f"Output tokens (first 20): {outputs[0, :20].tolist()}")
+            
+            # Decode properly
+            input_length = inputs['input_ids'].size(1)
+            logger.info(f"Input length: {input_length}, output length: {outputs.size(1)}")
+            
+            # Get only the new tokens
+            new_tokens = outputs[:, input_length:]
+            logger.info(f"New tokens shape: {new_tokens.shape}")
+            logger.info(f"New tokens: {new_tokens[0].tolist()}")
+            
+            # Decode
             response = self.processor.batch_decode(
-                outputs[:, input_length:],
-                skip_special_tokens=True
+                new_tokens,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False
             )[0]
+            
+            logger.info(f"Decoded response length: {len(response)}")
+            logger.info(f"Raw response: '{response}'")
+            logger.info(f"Stripped response: '{response.strip()}'")
+            logger.info(f"=== END DEBUGGING ===")
             
             return response.strip()
             
         except Exception as e:
             logger.error(f"Analysis failed: {str(e)}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return f"Error: {str(e)}"
     
     def generate_description(self, audio_path: str, prompt: str) -> str:

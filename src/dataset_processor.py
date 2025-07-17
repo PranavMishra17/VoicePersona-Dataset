@@ -128,29 +128,48 @@ class GlobeV2Processor:
     def process_single_sample(self, sample: Dict[str, Any], idx: int) -> Optional[Dict[str, Any]]:
         """Process a single sample with comprehensive error handling"""
         try:
-            logger.debug(f"Processing sample {idx}: {sample.get('speaker_id', 'unknown')}")
+            logger.info(f"=== PROCESSING SAMPLE {idx} ===")
+            logger.info(f"Sample keys: {list(sample.keys())}")
+            logger.info(f"Speaker ID: {sample.get('speaker_id', 'unknown')}")
+            logger.info(f"Transcript: {sample.get('transcript', '')}")
+            logger.info(f"Accent: {sample.get('accent', '')}")
+            logger.info(f"Age: {sample.get('age', '')}")
+            logger.info(f"Gender: {sample.get('gender', '')}")
+            logger.info(f"Duration: {sample.get('duration', 0.0)}")
             
             # Extract audio data
-            if isinstance(sample['audio'], dict):
-                audio_array = sample['audio']['array']
-                sample_rate = sample['audio']['sampling_rate']
+            audio_data = sample['audio']
+            logger.info(f"Audio data type: {type(audio_data)}")
+            
+            if isinstance(audio_data, dict):
+                logger.info(f"Audio dict keys: {list(audio_data.keys())}")
+                audio_array = audio_data['array']
+                sample_rate = audio_data['sampling_rate']
+                logger.info(f"Audio array shape: {audio_array.shape}, sample_rate: {sample_rate}")
             else:
-                audio_array = sample['audio']
+                audio_array = audio_data
                 sample_rate = 16000  # Default
+                logger.info(f"Audio array shape: {audio_array.shape}, default sample_rate: {sample_rate}")
             
             # Save to temp file
+            logger.info(f"Saving audio to temp file: {self.temp_audio_path}")
             temp_path = self.save_audio_temp(audio_array, sample_rate)
+            logger.info(f"Audio saved successfully")
             
-            # Generate descriptions
+            # Generate descriptions with plain text prompts
+            logger.info("Generating voice analysis...")
             voice_analysis = self.model_manager.generate_description(
                 temp_path, 
-                VoiceDescriptionPrompts.get_analysis_prompt()
+                "Please provide a detailed analysis of this voice recording. Focus on voice characteristics like tone, pitch, timbre, speaking style, emotional tone, and distinctive features."
             )
+            logger.info(f"Voice analysis result length: {len(voice_analysis)}")
             
+            logger.info("Generating character description...")
             character_description = self.model_manager.generate_description(
                 temp_path,
-                VoiceDescriptionPrompts.get_character_prompt()
+                "Based on this voice recording, describe what kind of character or persona this voice would suit. What type of character would have this voice? What profession or role would match this voice?"
             )
+            logger.info(f"Character description result length: {len(character_description)}")
             
             # Compile result
             result = {
@@ -166,6 +185,8 @@ class GlobeV2Processor:
                 'combined_description': f"Voice Analysis:\n{voice_analysis}\n\nCharacter/Persona:\n{character_description}",
                 'processing_timestamp': datetime.now().isoformat()
             }
+            
+            logger.info(f"=== SAMPLE {idx} COMPLETE ===")
             
             # Cleanup
             self.cleanup_temp_audio()

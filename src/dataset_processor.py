@@ -137,41 +137,66 @@ class GlobeV2Processor:
             logger.info(f"Gender: {sample.get('gender', '')}")
             logger.info(f"Duration: {sample.get('duration', 0.0)}")
             
-            # Extract audio data
+            # Extract audio data - handle multiple formats
             audio_data = sample['audio']
             logger.info(f"Audio data type: {type(audio_data)}")
             
-            if isinstance(audio_data, dict):
-                logger.info(f"Audio dict keys: {list(audio_data.keys())}")
-                audio_array = audio_data['array']
-                sample_rate = audio_data['sampling_rate']
-                logger.info(f"Audio array shape: {audio_array.shape}, sample_rate: {sample_rate}")
-            else:
-                audio_array = audio_data
-                sample_rate = 16000  # Default
-                logger.info(f"Audio array shape: {audio_array.shape}, default sample_rate: {sample_rate}")
+            try:
+                if hasattr(audio_data, 'decode'):
+                    # AudioDecoder object (newer datasets)
+                    logger.info("Decoding AudioDecoder object...")
+                    decoded = audio_data.decode()
+                    audio_array = decoded['array']
+                    sample_rate = decoded['sampling_rate']
+                elif isinstance(audio_data, dict):
+                    # Dict format (older datasets)
+                    logger.info(f"Audio dict keys: {list(audio_data.keys())}")
+                    audio_array = audio_data['array']
+                    sample_rate = audio_data['sampling_rate']
+                else:
+                    # Direct array
+                    audio_array = audio_data
+                    sample_rate = 16000
+                
+                logger.info(f"Final audio - type: {type(audio_array)}, sample_rate: {sample_rate}")
+                if hasattr(audio_array, 'shape'):
+                    logger.info(f"Audio shape: {audio_array.shape}")
+                
+            except Exception as e:
+                logger.error(f"Audio extraction failed: {e}")
+                return None
             
             # Save to temp file
             logger.info(f"Saving audio to temp file: {self.temp_audio_path}")
             temp_path = self.save_audio_temp(audio_array, sample_rate)
             logger.info(f"Audio saved successfully")
             
-            # Generate descriptions with plain text prompts
-            logger.info("Generating voice analysis...")
-            voice_analysis = self.model_manager.generate_description(
-                temp_path, 
-                "Please provide a detailed analysis of this voice recording. Focus on voice characteristics like tone, pitch, timbre, speaking style, emotional tone, and distinctive features."
-            )
-            logger.info(f"Voice analysis result length: {len(voice_analysis)}")
+            # Generate comprehensive voice description using dataset metadata
+            logger.info("Generating comprehensive voice description...")
             
-            logger.info("Generating character description...")
-            character_description = self.model_manager.generate_description(
-                temp_path,
-                "Based on this voice recording, describe what kind of character or persona this voice would suit. What type of character would have this voice? What profession or role would match this voice?"
-            )
-            logger.info(f"Character description result length: {len(character_description)}")
+            # Create comprehensive prompt with metadata
+            metadata_context = f"Speaker: {sample.get('gender', 'unknown')} in {sample.get('age', 'unknown')}, {sample.get('accent', 'unknown')} accent"
             
-            # Compile result
+            comprehensive_prompt = f"""Analyze this voice recording for character consistency purposes. {metadata_context}.
+
+Provide a detailed voice profile covering:
+
+**Vocal Qualities:** Pitch (high/low/medium), tone (warm/cold/bright/dark), timbre (rich/thin/raspy/smooth), resonance (nasal/throaty/chest/head voice), breathiness, clarity
+
+**Speaking Style:** Pace (fast/slow/measured), rhythm, articulation (crisp/relaxed/mumbled), emphasis patterns, pauses, vocal fry, uptalk
+
+**Emotional Undertones:** Confidence level, warmth, authority, friendliness, energy level, mood, approachability
+
+**Character Impression:** What personality traits does this voice convey? What type of character would this voice suit? Professional roles? Social settings?
+
+**Distinctive Features:** Unique vocal quirks, speech patterns, memorable qualities that define this voice
+
+Focus on HOW they speak rather than what they say. Describe the voice in vivid, specific terms that would help someone recreate or recognize this vocal character."""
+            
+            voice_description = self.model_manager.generate_description(temp_path, comprehensive_prompt)
+            logger.info(f"Voice description result length: {len(voice_description)}")
+            
+            # Compile result with single comprehensive description
             result = {
                 'index': idx,
                 'transcript': sample.get('transcript', ''),
@@ -180,9 +205,7 @@ class GlobeV2Processor:
                 'age': sample.get('age', ''),
                 'gender': sample.get('gender', ''),
                 'duration': sample.get('duration', 0.0),
-                'voice_analysis': voice_analysis,
-                'character_description': character_description,
-                'combined_description': f"Voice Analysis:\n{voice_analysis}\n\nCharacter/Persona:\n{character_description}",
+                'voice_description': voice_description,
                 'processing_timestamp': datetime.now().isoformat()
             }
             
@@ -368,14 +391,12 @@ class GlobeV2Processor:
         """Log dataset statistics"""
         total = len(data)
         
-        # Calculate average description lengths
-        analysis_lengths = [len(item['voice_analysis']) for item in data]
-        character_lengths = [len(item['character_description']) for item in data]
+        # Calculate average description length
+        description_lengths = [len(item['voice_description']) for item in data]
         
         logger.info(f"\nDataset Statistics:")
         logger.info(f"Total samples: {total}")
-        logger.info(f"Average voice analysis length: {np.mean(analysis_lengths):.0f} chars")
-        logger.info(f"Average character description length: {np.mean(character_lengths):.0f} chars")
+        logger.info(f"Average voice description length: {np.mean(description_lengths):.0f} chars")
         
         # Gender distribution
         gender_counts = {}

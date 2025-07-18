@@ -254,58 +254,103 @@ Focus on HOW they speak rather than what they say. Describe the voice in vivid, 
         return processed_data
     
     def _process_streaming_dataset(self, start_idx: int, end_idx: Optional[int], processed_data: List):
-        """Process streaming dataset"""
-        # Skip to start_idx for streaming dataset
+        """Process streaming dataset with diversity sampling"""
+        # Track accent+gender combinations for diversity
+        combination_counts = {}
+        target_samples = end_idx - start_idx if end_idx else 1000
+        
+        # Calculate target per combination (flexible)
+        max_combinations = 104  # 52 accents * 2 genders
+        samples_per_combination = max(1, target_samples // max_combinations)
+        
+        logger.info(f"Diversity sampling: targeting {samples_per_combination} samples per accent+gender combination")
+        
         dataset_iter = iter(self.dataset)
-        
-        # Skip samples before start_idx
-        for _ in range(start_idx):
-            try:
-                next(dataset_iter)
-            except StopIteration:
-                break
-        
-        # Process samples
-        idx = start_idx
+        idx = 0
         samples_processed = 0
+        samples_examined = 0
         
-        with tqdm(desc="Processing") as pbar:
+        with tqdm(desc="Processing (diversity sampling)") as pbar:
             for sample in dataset_iter:
-                # Check if we've reached end_idx
-                if end_idx and idx >= end_idx:
+                samples_examined += 1
+                
+                # Check if we've collected enough samples
+                if samples_processed >= target_samples:
                     break
                 
-                # Skip if already processed
+                # Skip if already processed (checkpoint recovery)
                 if idx in self.checkpoint_data['processed_indices']:
                     idx += 1
                     continue
                 
-                # Process sample
-                result = self.process_single_sample(sample, idx)
+                # Get combination key
+                gender = sample.get('gender', 'unknown')
+                accent = sample.get('accent', 'unknown')
                 
-                if result:
-                    processed_data.append(result)
-                    self.checkpoint_data['processed_indices'].add(idx)
-                    self.checkpoint_data['last_index'] = idx
-                    samples_processed += 1
+                # Focus on male/female for diversity
+                if gender not in ['male', 'female']:
+                    idx += 1
+                    continue
+                
+                combination_key = f"{accent}+{gender}"
+                current_count = combination_counts.get(combination_key, 0)
+                
+                # Decide whether to include this sample
+                should_include = False
+                
+                if current_count < samples_per_combination:
+                    # Always include if under target for this combination
+                    should_include = True
+                elif samples_processed < target_samples:
+                    # If some combinations are full but we need more samples,
+                    # include with lower probability
+                    import random
+                    should_include = random.random() < 0.3
+                
+                if should_include:
+                    # Process sample
+                    result = self.process_single_sample(sample, idx)
                     
-                    # Update progress bar
-                    pbar.set_postfix({
-                        'idx': idx,
-                        'speaker': result.get('speaker_id', 'unknown')[:10],
-                        'gpu_mem': f"{torch.cuda.memory_allocated()/1e9:.1f}GB" if DEVICE == "cuda" else "CPU"
-                    })
-                    pbar.update(1)
-                
-                # Periodic operations
-                if (samples_processed + 1) % CHECKPOINT_INTERVAL == 0:
-                    self.save_checkpoint()
-                
-                if DEVICE == "cuda" and (samples_processed + 1) % CLEAR_CACHE_INTERVAL == 0:
-                    torch.cuda.empty_cache()
-                    gc.collect()
+                    if result:
+                        processed_data.append(result)
+                        self.checkpoint_data['processed_indices'].add(idx)
+                        self.checkpoint_data['last_index'] = idx
+                        samples_processed += 1
+                        combination_counts[combination_key] = current_count + 1
+                        
+                        # Update progress bar
+                        pbar.set_postfix({
+                            'processed': samples_processed,
+                            'combinations': len(combination_counts),
+                            'examined': samples_examined,
+                            'speaker': result.get('speaker_id', 'unknown')[:10],
+                        })
+                        pbar.update(1)
+                    
+                    # Periodic operations
+                    if samples_processed % CHECKPOINT_INTERVAL == 0:
+                        self.save_checkpoint()
+                    
+                    if DEVICE == "cuda" and samples_processed % CLEAR_CACHE_INTERVAL == 0:
+                        torch.cuda.empty_cache()
+                        gc.collect()
                 
                 idx += 1
+                
+                # Safety break if we've examined too many samples
+                if samples_examined > target_samples * 10:
+                    logger.warning(f"Examined {samples_examined} samples, stopping to avoid infinite loop")
+                    break
+        
+        # Log diversity statistics
+        logger.info(f"\nDiversity Statistics:")
+        logger.info(f"Total combinations found: {len(combination_counts)}")
+        logger.info(f"Samples per combination range: {min(combination_counts.values()) if combination_counts else 0}-{max(combination_counts.values()) if combination_counts else 0}")
+        
+        # Show top combinations
+        sorted_combinations = sorted(combination_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        for combo, count in sorted_combinations:
+            logger.info(f"  {combo}: {count} samples")
                 
         return processed_data
     

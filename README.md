@@ -1,20 +1,27 @@
 # VoicePersona Dataset
 
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Datasets-blue)](https://huggingface.co/datasets)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: CC0](https://img.shields.io/badge/License-CC0%201.0-lightgrey.svg)](http://creativecommons.org/publicdomain/cc0/1.0/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 A comprehensive voice persona dataset for character consistency in voice synthesis, generated using advanced audio-language models.
 
 ## 📋 Overview
 
-VoicePersona Dataset provides detailed voice character profiles for maintaining consistency across voice synthesis applications. Each sample includes rich vocal characteristics, speaking patterns, and personality traits extracted from diverse audio sources.
+VoicePersona Dataset serves as the **training foundation** for [**VoiceForge**](https://github.com/PranavMishra17/VoiceForge--Forge-Character-Voices-from-Pure-Text) - an AI architecture that generates character voices from pure text descriptions.
 
-**Key Features:**
-- **Detailed Voice Profiles**: Comprehensive descriptions of vocal qualities, speaking style, and character traits
-- **Multi-Domain Sources**: Combines emotional speech, anime voices, and global accents
-- **Character Consistency**: Designed for maintaining voice persona across different contexts
-- **HuggingFace Ready**: Pre-formatted for easy integration with ML pipelines
+**The Connection:**
+- **VoicePersona** provides detailed voice characteristics and personality profiles
+- **VoiceForge** uses this data to learn text→voice mapping for character consistency
+- Together, they enable voice synthesis from natural language descriptions alone
+
+**VoiceForge Applications:**
+- 🎮 Game developers creating unique NPCs
+- 📚 Interactive storytelling applications  
+- 🎬 Content creators needing character voices
+- 🔬 Researchers in voice synthesis
+
+This dataset bridges the gap between voice analysis and synthesis, providing the structured training data needed for consistent character voice generation without audio samples or voice actors.
 
 ## 🎯 What We Do
 
@@ -132,7 +139,12 @@ Key settings in `src/config.py`:
 
 ## 👤 About
 
-This project was developed to address the need for consistent voice characterization in AI voice synthesis. By providing detailed voice personas, it enables better character consistency across different speaking contexts and applications.
+This project was developed by me to address the need for consistent voice characterization in AI voice synthesis. By providing detailed voice personas, it enables better character consistency across different speaking contexts and applications.
+
+[![Portfolio](https://img.shields.io/badge/-Portfolio-000?style=for-the-badge&logo=vercel&logoColor=white)](https://portfolio-pranav-mishra-paranoid.vercel.app)
+[![LinkedIn](https://img.shields.io/badge/-LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/pranavgamedev/)
+[![Resume](https://img.shields.io/badge/-Resume-4B0082?style=for-the-badge&logo=read-the-docs&logoColor=white)](https://portfolio-pranav-mishra-paranoid.vercel.app/resume)
+[![YouTube](https://img.shields.io/badge/-YouTube-8B0000?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/@parano1dgames/featured)
 
 **Research Interests:**
 - Voice synthesis and character consistency
@@ -167,7 +179,14 @@ Contributions welcome! Areas for improvement:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the CC0 1.0 Universal License - see the [LICENSE](LICENSE) file for details.
+
+**CC0 1.0 Universal Summary:**
+- ✅ Commercial use
+- ✅ Modification  
+- ✅ Distribution
+- ✅ Private use
+- ❌ No warranties or liability
 
 ## 🙏 Acknowledgments
 
@@ -183,8 +202,8 @@ If you use this dataset in your research, please cite:
 ```bibtex
 @dataset{voicepersona2025,
   title={VoicePersona Dataset: Comprehensive Voice Character Profiles for Synthesis Consistency},
-  author={[Your Name]},
+  author={Pranav Mishra},
   year={2025},
-  url={https://github.com/[username]/voicepersona-dataset}
+  url={https://github.com/PranavMishra17/VoicePersona-Dataset}
 }
 ```

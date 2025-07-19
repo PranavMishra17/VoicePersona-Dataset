@@ -1,6 +1,6 @@
-# GLOBE_V2 Voice Description Pipeline with Qwen2-Audio
+# VoicePersona Dataset generation Pipeline with Qwen2-Audio-7B 
 
-A GPU-optimized pipeline for generating detailed voice descriptions from the GLOBE_V2 speech dataset using Qwen2-Audio-7B model. Designed to work on consumer GPUs (6GB VRAM) through quantization and streaming.
+A GPU-optimized pipeline for generating detailed voice descriptions using Qwen2-Audio-7B model. Designed to work on consumer GPUs (6GB VRAM) through quantization and streaming.
 
 ## 📋 Table of Contents
 - [Overview](#overview)

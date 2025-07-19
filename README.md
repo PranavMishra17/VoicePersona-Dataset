@@ -1,291 +1,190 @@
-# VoicePersona Dataset generation Pipeline with Qwen2-Audio-7B 
+# VoicePersona Dataset
 
-A GPU-optimized pipeline for generating detailed voice descriptions using Qwen2-Audio-7B model. Designed to work on consumer GPUs (6GB VRAM) through quantization and streaming.
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Datasets-blue)](https://huggingface.co/datasets)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-## 📋 Table of Contents
-- [Overview](#overview)
-- [System Requirements](#system-requirements)
-- [Project Structure](#project-structure)
-- [How It Works](#how-it-works)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Configuration](#configuration)
-- [Troubleshooting](#troubleshooting)
+A comprehensive voice persona dataset for character consistency in voice synthesis, generated using advanced audio-language models.
 
-## 🎯 Overview
+## 📋 Overview
 
-This pipeline processes speech audio from GLOBE_V2 dataset and generates:
-- **Voice characteristics**: Tone, pitch, timbre, speaking style
-- **Character personas**: What type of character would have this voice
-- **Technical analysis**: Acoustic features and patterns
+VoicePersona Dataset provides detailed voice character profiles for maintaining consistency across voice synthesis applications. Each sample includes rich vocal characteristics, speaking patterns, and personality traits extracted from diverse audio sources.
 
-### Key Features
-- **4-bit Quantization**: Runs 7B model on 6GB VRAM (RTX 3060)
-- **Streaming Mode**: Process without downloading 70GB dataset
-- **Checkpoint System**: Resume from interruptions
-- **Multiple Fallbacks**: CPU offloading, alternative models, API options
+**Key Features:**
+- **Detailed Voice Profiles**: Comprehensive descriptions of vocal qualities, speaking style, and character traits
+- **Multi-Domain Sources**: Combines emotional speech, anime voices, and global accents
+- **Character Consistency**: Designed for maintaining voice persona across different contexts
+- **HuggingFace Ready**: Pre-formatted for easy integration with ML pipelines
 
-## 💻 System Requirements
+## 🎯 What We Do
 
-### Minimum (with optimizations)
-- **GPU**: 6GB VRAM (RTX 3060 or better)
-- **RAM**: 8GB (16GB recommended)
-- **Disk**: 20GB free space
-- **CUDA**: 11.8+ with cuDNN
+This pipeline processes audio from multiple voice datasets and generates detailed character profiles using [Qwen2-Audio-7B-Instruct](https://huggingface.co/Qwen/Qwen2-Audio-7B-Instruct). The system:
 
-### What Happens With Limited Resources?
-1. **Low VRAM (<6GB)**: Model automatically offloads layers to CPU
-2. **Low Disk Space**: Streaming mode processes data without full download
-3. **No GPU**: Falls back to CPU mode (very slow)
+1. **Extracts Voice Characteristics**: Analyzes pitch, tone, timbre, resonance, and speaking patterns
+2. **Identifies Demographics**: Estimates gender, age range, and accent
+3. **Profiles Personality**: Determines character traits and suitable roles
+4. **Maintains Consistency**: Focuses on "how" speakers talk rather than "what" they say
 
-## 📁 Project Structure
+## 📊 Dataset Structure
 
 ```
-globe_v2_qwen2_audio/
-├── src/
-│   ├── config.py              # All settings and paths
-│   ├── model_manager.py       # Handles model loading with quantization
-│   ├── dataset_processor.py   # Processes audio samples with checkpointing
-│   ├── prompts.py            # Voice analysis prompt templates
-│   └── utils.py              # Analysis and visualization tools
-├── main.py                   # Entry point with CLI
-├── requirements.txt          # Dependencies (includes bitsandbytes)
-│
-├── cache/                    # Model downloads (~3.5GB with 4-bit)
-├── checkpoints/             # Resume points (saves every 100 samples)
-├── data/                    # Temporary audio files
-├── output/                  # Results in JSON/JSONL format
-└── logs/                    # Processing logs
+voicepersona_dataset/
+├── globe_v2/
+│   ├── audio/                    # Original audio files (.wav)
+│   ├── globe_v2_descriptions.json
+│   └── globe_v2_hf_dataset/      # HuggingFace format
+├── laions/
+│   ├── audio/
+│   ├── laions_descriptions.json
+│   └── laions_hf_dataset/
+├── animevox/
+│   ├── audio/
+│   ├── animevox_descriptions.json
+│   └── animevox_hf_dataset/
+└── anispeech/
+    ├── audio/
+    ├── anispeech_descriptions.json
+    └── anispeech_hf_dataset/
 ```
 
-### File Descriptions
-
-#### `src/config.py`
-- **Purpose**: Central configuration for all settings
-- **Key settings**:
-  - `LOAD_IN_4BIT = True`: Enables 4-bit quantization (3.5GB instead of 14GB)
-  - `USE_STREAMING = True`: Stream dataset to save disk space
-  - `CHECKPOINT_INTERVAL = 100`: Auto-save frequency
-  - `MAX_AUDIO_LENGTH = 30`: Clip audio to 30 seconds
-
-#### `src/model_manager.py`
-- **Purpose**: Handles Qwen2-Audio model with GPU optimization
-- **Features**:
-  - 4-bit quantization using BitsAndBytes
-  - Automatic CPU offloading when VRAM is full
-  - Mixed precision (FP16) for faster processing
-  - Memory monitoring and cleanup
-
-#### `src/dataset_processor.py`
-- **Purpose**: Processes GLOBE_V2 dataset samples
-- **Features**:
-  - Streaming mode to avoid 70GB download
-  - Checkpoint system for resuming
-  - Saves results incrementally to JSONL
-  - GPU memory management
-
-#### `src/prompts.py`
-- **Purpose**: Templates for voice analysis
-- **Includes**:
-  - Voice characteristics prompt
-  - Character/persona prompt
-  - Technical analysis prompt
-  - Combined comprehensive prompt
-
-## 🔧 How It Works
-
-### 1. Model Loading Process
-```python
-# What happens when you run the code:
-1. Loads Qwen2-Audio-7B-Instruct model
-2. Applies 4-bit quantization (reduces 14GB → 3.5GB)
-3. Splits model between GPU (5GB) and CPU (remaining)
-4. Uses BitsAndBytes for efficient quantization
-```
-
-### 2. Dataset Loading
-```python
-# Two modes available:
-STREAMING MODE (default):
-- Downloads samples on-demand
-- No full 70GB download needed
-- Processes one at a time
-
-FULL MODE:
-- Downloads entire dataset
-- Requires 70GB+ disk space
-- Faster batch processing
-```
-
-### 3. Processing Pipeline
-```
-Audio Sample → Temporary WAV → Qwen2-Audio → Voice Description → Save to JSON
-     ↓                                              ↓
-  30s max clip                              Checkpoint every 100
-```
-
-### 4. Quantization Explained
-Quantization reduces model precision to save memory:
-- **Original**: 32-bit floats (14GB)
-- **8-bit**: Integer approximation (7GB) - still too large
-- **4-bit**: Further compressed (3.5GB) - fits in 6GB VRAM
-- Trade-off: Slightly lower quality for 75% memory savings
-
-## 🚀 Installation
-
-```bash
-# Clone repository
-git clone <repository>
-cd globe_v2_qwen2_audio
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies (includes bitsandbytes for quantization)
-pip install -r requirements.txt
-
-# Verify CUDA
-python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
-```
-
-## 📖 Usage
-
-### Quick Start
-```bash
-# 1. Test on 2 samples (recommended first)
-python main.py test --samples 2
-
-# 2. Process 100 samples
-python main.py process --start 0 --end 100
-
-# 3. Resume from checkpoint
-python main.py process  # Automatically resumes
-
-# 4. Analyze results
-python main.py analyze
-```
-
-### Output Format
-Results saved as JSON with structure:
+### Sample Output Format
 ```json
 {
   "index": 0,
-  "speaker_id": "speaker_001",
-  "transcript": "Hello, how are you today?",
-  "accent": "US",
-  "age": "20-29",
+  "dataset": "globe_v2",
+  "speaker_id": "S_000658",
+  "transcript": "each member has one share and one vote.",
+  "audio_path": "/path/to/audio.wav",
+  "duration": 2.9,
   "gender": "female",
-  "duration": 3.45,
-  "voice_analysis": "The speaker has a warm, mid-range voice...",
-  "character_description": "This voice would suit a friendly narrator...",
-  "combined_description": "Full analysis combining both aspects..."
+  "age": "thirties",
+  "accent": "New Zealand English",
+  "voice_description": "Detailed voice profile including vocal qualities, speaking style, emotional undertones, character impression, and distinctive features...",
+  "processing_timestamp": "2025-07-17T01:57:41.590598"
 }
 ```
 
-## ⚙️ Configuration
+## 🗃️ Source Datasets
 
-### Key Settings in `src/config.py`
+| Dataset | Description | Samples | Link |
+|---------|-------------|---------|------|
+| **GLOBE_V2** | Global accents, 52 accents × 3 genders | ~50K | [MushanW/GLOBE_V2](https://huggingface.co/datasets/MushanW/GLOBE_V2) |
+| **Laions Got Talent** | Emotional speech synthesis | ~15K | [laion/laions_got_talent](https://huggingface.co/datasets/laion/laions_got_talent) |
+| **AnimeVox** | Anime character voices | ~10K | [taresh18/AnimeVox](https://huggingface.co/datasets/taresh18/AnimeVox) |
+| **AniSpeech** | Anime speech synthesis | ~8K | [ShoukanLabs/AniSpeech](https://huggingface.co/datasets/ShoukanLabs/AniSpeech) |
 
-```python
-# Model Settings
-LOAD_IN_4BIT = True         # Must be True for 6GB VRAM
-MAX_MEMORY = {0: "5GB", "cpu": "16GB"}  # GPU/CPU split
+## 🤖 Model Used
 
-# Dataset Settings  
-USE_STREAMING = True        # Stream to save disk space
-USE_SUBSET = True          # Process subset only
-SUBSET_SIZE = 1000         # Number of samples
+**Qwen2-Audio-7B-Instruct**: [Alibaba's multimodal audio-language model](https://huggingface.co/Qwen/Qwen2-Audio-7B-Instruct)
+- 7B parameters optimized for audio understanding
+- Supports voice chat and audio analysis
+- Multilingual capabilities (8+ languages)
 
-# Processing Settings
-CHECKPOINT_INTERVAL = 100   # Save progress frequency
-CLEAR_CACHE_INTERVAL = 50   # GPU memory cleanup
-```
+## 🚀 Usage
 
-### Model Storage Locations
-- **Model cache**: `./cache/` or `~/.cache/huggingface/`
-- **First run**: Downloads ~3.5GB model files
-- **Subsequent runs**: Loads from cache
-
-### Data Flow
-1. **Streaming**: Downloads audio samples individually
-2. **Processing**: Saves to temporary WAV file
-3. **Analysis**: Sends through Qwen2-Audio
-4. **Output**: Appends to JSONL file
-5. **Cleanup**: Removes temporary files
-
-## 🔨 Troubleshooting
-
-### "CUDA out of memory"
-```python
-# In config.py, try:
-MAX_MEMORY = {0: "4GB", "cpu": "20GB"}  # Use less GPU
-```
-
-### "Some modules are dispatched on CPU"
-This is normal! The model is split between GPU/CPU. Add to config:
-```python
-llm_int8_enable_fp32_cpu_offload = True  # Already set
-```
-
-### "No space left on device"
-1. Enable streaming: `USE_STREAMING = True`
-2. Clear cache: `rm -rf ./cache/*`
-3. Process smaller subset: `SUBSET_SIZE = 100`
-
-### Slow Processing
-- Normal speed: ~10-15 seconds per sample
-- If slower: Check if using CPU fallback
-- Solution: Ensure CUDA is properly installed
-
-### Alternative Fallbacks
-If Qwen2-Audio doesn't work:
-1. **Whisper mode**: Set `USE_ALTERNATIVE_MODEL = True`
-2. **API mode**: Set `USE_API = True` with OpenAI key
-3. **CPU only**: Set `DEVICE = "cpu"` (very slow)
-
-## 📊 Performance Metrics
-
-| Configuration | VRAM | Speed | Quality |
-|--------------|------|-------|---------|
-| 4-bit quantization | 3.5GB | 10-15s/sample | Good |
-| 8-bit quantization | 7GB | 8-12s/sample | Better |
-| Full precision | 14GB | 5-10s/sample | Best |
-| CPU mode | 0GB | 60-120s/sample | Good |
-
-## 🛠️ Advanced Usage
-
-### Process Specific Accents
-```python
-# In dataset_processor.py, add filter:
-dataset = dataset.filter(lambda x: x['accent'] == 'US')
-```
-
-### Change Analysis Focus
-```python
-# In prompts.py, modify prompts for different analysis:
-- Emotion detection focus
-- accent analysis focus  
-- Speech impediment detection
-```
-
-### Export for Training
+### Installation
 ```bash
-python main.py export --format instruction
+git clone <repository>
+cd voicepersona-dataset
+pip install -r requirements.txt
 ```
 
-## 📝 Notes
+### Quick Start
+```bash
+# List available datasets
+python main.py list
 
-- First run downloads 3.5GB model (one-time)
-- Each audio sample generates ~2-3KB of description
-- Full GLOBE_V2 has ~50k samples = ~150MB output
-- Checkpoint allows resuming anytime
-- Results append to existing files (safe for interruptions)
+# Test processing
+python main.py test globe_v2 --samples 5
+
+# Process full dataset
+python main.py process laions --max 1000
+
+# Analyze results
+python main.py analyze animevox
+```
+
+### Configuration
+Key settings in `src/config.py`:
+- `USE_QUANTIZATION`: Enable 4-bit quantization for 6GB VRAM
+- `USE_STREAMING`: Stream datasets without full download
+- `CHECKPOINT_INTERVAL`: Auto-save frequency
+
+## 📈 Dataset Statistics
+
+- **Total Samples**: 80K+ voice samples across 4 datasets
+- **Languages**: 8+ languages and 52+ accent variations
+- **Demographics**: Balanced gender and age distributions
+- **Domains**: Conversational, emotional, anime, and synthetic speech
+
+## 🔧 System Requirements
+
+**Minimum:**
+- GPU: 6GB VRAM (RTX 3060+)
+- RAM: 16GB
+- Storage: 50GB free space
+- CUDA 11.8+
+
+**Recommended:**
+- GPU: 12GB+ VRAM
+- RAM: 32GB
+- Storage: 100GB+ SSD
+
+## 👤 About
+
+This project was developed to address the need for consistent voice characterization in AI voice synthesis. By providing detailed voice personas, it enables better character consistency across different speaking contexts and applications.
+
+**Research Interests:**
+- Voice synthesis and character consistency
+- Multimodal AI applications
+- Audio-language model development
 
 ## 🤝 Contributing
 
-Contributions welcome for:
-- Memory optimization techniques
-- Alternative model support
-- Better voice analysis features
-- Multi-GPU support
+Contributions welcome! Areas for improvement:
+
+**Datasets:**
+- Additional voice datasets integration
+- Multilingual voice collections
+- Emotional speech datasets
+
+**Technical:**
+- Model optimization for lower VRAM
+- Faster processing pipelines
+- Better voice characteristic extraction
+
+**Analysis:**
+- Voice similarity metrics
+- Character consistency evaluation
+- Demographic bias analysis
+
+### How to Contribute
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/improvement`)
+3. Commit changes (`git commit -am 'Add improvement'`)
+4. Push branch (`git push origin feature/improvement`)
+5. Open Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Qwen Team** for the Qwen2-Audio model
+- **Dataset Contributors**: GLOBE_V2, Laions, AnimeVox, AniSpeech teams
+- **HuggingFace** for dataset hosting and tools
+- **Open Source Community** for supporting libraries
+
+## 📞 Citation
+
+If you use this dataset in your research, please cite:
+
+```bibtex
+@dataset{voicepersona2025,
+  title={VoicePersona Dataset: Comprehensive Voice Character Profiles for Synthesis Consistency},
+  author={[Your Name]},
+  year={2025},
+  url={https://github.com/[username]/voicepersona-dataset}
+}
+```

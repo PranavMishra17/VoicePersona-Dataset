@@ -1,0 +1,15 @@
+[
+  {
+    "index": 1,
+    "dataset": "globe_v2",
+    "speaker_id": "S_000658",
+    "transcript": "each member has one share and one vote.",
+    "audio_path": "E:\\globe2-qwen2-voice-describer\\output\\globe_v2\\audio\\globe_v2_1_S_000658.wav",
+    "duration": 2.9,
+    "voice_description": "The speaker is a female with a thirties New Zealand English accent. She has a warm and clear tone with a soft and resonant quality. Her voice has minimal breathiness and resonance, making it easy to hear and understand. She speaks at a measured pace, with a crisp and well-articulated speech pattern. There are no noticeable pauses or vocal fry, and her speech is delivered with a neutral mood and approachable energy level. One of her distinctive features is her clear enunciation, which makes her voice stand out.\nOverall, her voice conveys a confident and professional image, making it suitable for professional settings. However, her friendly and approachable energy level also makes her voice well-suited for social settings as well. Her voice is memorable due to its distinct and clear enunciation, which makes it easily recognizable.",
+    "processing_timestamp": "2025-07-19T16:06:43.242870",
+    "gender": "female",
+    "age": "thirties",
+    "accent": "New Zealand English"
+  }
+]

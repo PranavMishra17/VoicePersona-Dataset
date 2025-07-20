@@ -1,0 +1,44 @@
+{
+  "citation": "",
+  "description": "",
+  "features": {
+    "index": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "transcript": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "speaker_id": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "accent": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "age": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "gender": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "duration": {
+      "dtype": "float64",
+      "_type": "Value"
+    },
+    "voice_description": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "processing_timestamp": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": ""
+}

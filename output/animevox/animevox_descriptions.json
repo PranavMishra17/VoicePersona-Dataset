@@ -1,0 +1,15 @@
+[
+  {
+    "index": 1,
+    "dataset": "animevox",
+    "speaker_id": "Frieren: Beyond Journey's End_Frieren",
+    "transcript": "What's wrong?",
+    "audio_path": "E:\\globe2-qwen2-voice-describer\\output\\animevox\\audio\\animevox_1_Frieren: Beyond Journey's End_Frieren.wav",
+    "duration": 0.693015873015873,
+    "voice_description": "A young female voice with a clear and vibrant tone. The voice has a slightly breathy quality and is projected in a way that suggests she is speaking quickly and with animation. There are no noticeable accents or inflections in her speech, indicating a neutral speaking style. She uses her chest voice and projects her voice forward, giving it a full and resonant sound. Overall, her voice has a smooth texture with a slightly raspy edge.",
+    "processing_timestamp": "2025-07-20T01:57:27.089135",
+    "gender": "female",
+    "age": "twenties",
+    "accent": "General American"
+  }
+]

@@ -1,0 +1,15 @@
+[
+  {
+    "index": 1,
+    "dataset": "laions",
+    "speaker_id": "alloy_intense_anger_rage_fury_hatred_and_annoyance_emotional_tts_test_intense_anger_rage_fury_hatred_and_annoyance_After all I've done for you, this is how you repay_temperature",
+    "transcript": "After all I've done for you, this is how you repay me, with betrayal and lies, (a bitter chuckle, laced with fury, bubbling up from deep within) you're nothing but a viper in disguise.",
+    "audio_path": "E:\\globe2-qwen2-voice-describer\\output\\laions\\audio\\laions_1_alloy_intense_anger_rage_fury_hatred_and_annoyance_emotional_tts_test_intense_anger_rage_fury_hatred_and_annoyance_After all I've done for you, this is how you repay_temperature.wav",
+    "duration": 15.85,
+    "voice_description": "The speaker possesses a bright and clear tone with a slightly elevated pitch, indicating anger and frustration. There's a noticeable emphasis on the left side of the mouth, suggesting an emotional emphasis towards intense feelings of betrayal and deceit. The vocal delivery is rapid and forceful, reflecting a state of agitation and fury. The timbre is firm and slightly resounding, which complements the overall intensity of the emotion expressed. There's a noticeable breathlessness in between words, possibly indicating a heightened emotional state.",
+    "processing_timestamp": "2025-07-19T17:45:40.195771",
+    "gender": "female",
+    "age": "twenties",
+    "accent": "Neutral/Unknown"
+  }
+]

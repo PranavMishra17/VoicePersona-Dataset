@@ -56,7 +56,7 @@ def parse_voice_response(response: str, dataset_name: str) -> dict:
         if accent_match:
             accent = accent_match.group(1).strip()
             # Clean up common variations
-            if 'neutral' in accent.lower() or 'unknown' in accent.lower():
+            if 'neutral' in accent.lower() or 'unknown' in accent.lower() or 'none' in accent.lower():
                 result['accent'] = 'General American'  # Default assumption
             else:
                 result['accent'] = accent

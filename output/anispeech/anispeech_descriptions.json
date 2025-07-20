@@ -1,0 +1,15 @@
+[
+  {
+    "index": 1,
+    "dataset": "anispeech",
+    "speaker_id": "anispeech_0_1",
+    "transcript": "Can I have this printer that's written off? And my gosh, how could you tomb that whole pile of paper in the shredder? You can still write on the back!",
+    "audio_path": "E:\\globe2-qwen2-voice-describer\\output\\anispeech\\audio\\anispeech_1_anispeech_0_1.wav",
+    "duration": 8.75,
+    "voice_description": "A male voice in his twenties with a neutral accent. The pitch range is medium with a clear, crisp tone quality. There is a forward resonance with precise articulation typical of anime voice work. The speaking rhythm flows naturally with a slightly animated style.",
+    "processing_timestamp": "2025-07-20T15:18:41.312739",
+    "gender": "male",
+    "age": "twenties",
+    "accent": "General American"
+  }
+]

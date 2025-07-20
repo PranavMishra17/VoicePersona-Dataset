@@ -216,7 +216,7 @@ Focus on the voice actor's consistent vocal qualities regardless of which charac
 class AniSpeechProcessor(BaseDatasetProcessor):
     """AniSpeech dataset processor"""
     
-    def load_dataset(self, split: str = "train"):
+    def load_dataset(self, split: str = "ENGLISH"):
         """Load AniSpeech dataset"""
         try:
             logger.info("Loading AniSpeech dataset...")

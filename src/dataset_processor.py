@@ -54,24 +54,26 @@ class GlobeV2Processor(BaseDatasetProcessor):
         }
     
     def get_analysis_prompt(self, sample_data: Dict[str, Any]) -> str:
-        """Get analysis prompt for GLOBE_V2"""
+        """Get analysis prompt for GLOBE_V2 - only voice profile needed"""
         metadata = f"Speaker: {sample_data['gender']} in {sample_data['age']}, {sample_data['accent']} accent"
         
-        return f"""Analyze this voice recording for character consistency purposes. {metadata}.
+        return f"""Analyze this voice recording for character consistency. {metadata}.
+
+Describe the speaker's NATURAL voice characteristics - how they inherently sound, not what emotions they're expressing.
 
 Provide a detailed voice profile covering:
 
-**Vocal Qualities:** Pitch (high/low/medium), tone (warm/cold/bright/dark), timbre (rich/thin/raspy/smooth), resonance (nasal/throaty/chest/head voice), breathiness, clarity
+**Pitch Range**: Natural speaking pitch (high/medium/low/deep)
+**Tone Quality**: Warm/cool, bright/dark, rich/thin  
+**Timbre**: Smooth/raspy/breathy/nasal/clear/gravelly
+**Resonance**: Chest voice/head voice/throaty/forward placement
+**Speaking Rhythm**: Natural pace, pauses, flow patterns
+**Articulation Style**: Crisp/relaxed/precise/casual
+**Vocal Texture**: Any unique qualities (vocal fry, breathiness, etc.)
 
-**Speaking Style:** Pace (fast/slow/measured), rhythm, articulation (crisp/relaxed/mumbled), emphasis patterns, pauses, vocal fry, uptalk
+Example: "Medium-low pitch with warm, slightly raspy timbre. Speaks with measured pace and clear articulation. Voice has natural chest resonance with slight breathiness. Tends to emphasize consonants crisply."
 
-**Emotional Undertones:** Confidence level, warmth, authority, friendliness, energy level, mood, approachability
-
-**Character Impression:** What personality traits does this voice convey? What type of character would this voice suit? Professional roles? Social settings?
-
-**Distinctive Features:** Unique vocal quirks, speech patterns, memorable qualities that define this voice
-
-Focus on HOW they speak rather than what they say. Describe the voice in vivid, specific terms that would help someone recreate or recognize this vocal character."""
+Focus on replicable voice characteristics, not the emotional content of this recording."""
 
 class LaionsProcessor(BaseDatasetProcessor):
     """Laions Got Talent dataset processor"""
@@ -116,26 +118,31 @@ class LaionsProcessor(BaseDatasetProcessor):
         }
     
     def get_analysis_prompt(self, sample_data: Dict[str, Any]) -> str:
-        """Get analysis prompt for Laions dataset"""
+        """Get analysis prompt for Laions dataset - needs all metadata"""
         emotion_context = f"Emotional context: {sample_data.get('emotion', 'unknown')}"
         
         return f"""Analyze this voice recording for character consistency. {emotion_context}.
 
-Provide a comprehensive voice profile including:
+Describe the speaker's UNDERLYING voice characteristics - their natural voice qualities beneath any emotional expression.
 
-**Vocal Qualities:** Pitch, tone, timbre, resonance, breathiness, clarity
-**Speaking Style:** Pace, rhythm, articulation, emphasis patterns
-**Emotional Expression:** How the emotion is conveyed through vocal qualities
-**Character Traits:** Personality conveyed through voice, suitable character types
-**Demographics:** Estimate gender (male/female/other), age range (teens/twenties/thirties/forties/fifties+), accent if detectable
+**Required Format:**
+GENDER: [male/female]
+AGE: [teens/twenties/thirties/forties/fifties+]
+ACCENT: [specific accent like "General American", "British RP", "Australian" - never "neutral"]
+VOICE_PROFILE: [detailed description]
 
-Format your response to include:
-GENDER: [estimated gender]
-AGE: [estimated age range] 
-ACCENT: [detected accent or 'neutral/unknown']
-VOICE_PROFILE: [detailed voice description focusing on characteristics for character consistency]
+**Voice Profile Should Include:**
+- **Pitch Range**: Natural speaking pitch (high/medium/low/deep)
+- **Tone Quality**: Warm/cool, bright/dark, rich/thin
+- **Timbre**: Smooth/raspy/breathy/nasal/clear/gravelly  
+- **Resonance**: Chest voice/head voice/throaty/forward placement
+- **Speaking Rhythm**: Natural pace, pauses, flow patterns
+- **Articulation Style**: Crisp/relaxed/precise/casual
+- **Vocal Texture**: Any unique qualities
 
-Focus on vocal delivery rather than content."""
+Example: "High-medium pitch with bright, clear timbre. Natural speaking rhythm is quick but controlled. Voice has forward resonance with crisp articulation."
+
+Ignore the emotional performance - focus on the speaker's inherent vocal characteristics that remain consistent."""
 
 class AnimeVoxProcessor(BaseDatasetProcessor):
     """AnimeVox dataset processor"""
@@ -179,26 +186,32 @@ class AnimeVoxProcessor(BaseDatasetProcessor):
         }
     
     def get_analysis_prompt(self, sample_data: Dict[str, Any]) -> str:
-        """Get analysis prompt for AnimeVox"""
+        """Get analysis prompt for AnimeVox - needs all metadata"""
         character_context = f"Character: {sample_data.get('character_name', 'unknown')} from {sample_data.get('anime', 'unknown')}"
         
         return f"""Analyze this anime voice recording for character consistency. {character_context}.
 
-Provide a comprehensive voice profile including:
+Describe the voice actor's natural vocal characteristics, not the character they're portraying.
 
-**Vocal Qualities:** Pitch, tone, timbre, resonance, vocal style typical of anime characters
-**Speaking Style:** Pace, rhythm, articulation, anime-specific vocal patterns
-**Character Expression:** How personality is conveyed through vocal delivery
-**Voice Acting Style:** Performance characteristics, emotional range
-**Demographics:** Estimate gender (male/female/other), age range (teens/twenties/thirties/forties+), accent if detectable
+**Required Format:**
+GENDER: [male/female] 
+AGE: [teens/twenties/thirties/forties/fifties+]
+ACCENT: [specific accent like "Japanese-accented English", "General American" - never "neutral"]
+VOICE_PROFILE: [detailed description]
 
-Format your response to include:
-GENDER: [estimated gender]
-AGE: [estimated age range]
-ACCENT: [detected accent or 'Japanese/anime style']
-VOICE_PROFILE: [detailed voice description focusing on anime character voice consistency]
+**Voice Profile Should Include:**
+- **Pitch Range**: Natural vocal range and placement
+- **Tone Quality**: Warm/cool, bright/dark, rich/thin
+- **Timbre**: Smooth/raspy/breathy/nasal/clear/gravelly
+- **Resonance**: Chest voice/head voice/throaty/forward placement  
+- **Speaking Rhythm**: Natural pace, pauses, flow patterns
+- **Articulation Style**: Crisp/relaxed/precise/casual
+- **Performance Style**: How they approach voice acting
+- **Vocal Texture**: Any unique qualities
 
-Focus on vocal performance and character voice traits."""
+Example: "Medium-high pitch with youthful, bright timbre. Uses head-voice resonance with slight breathiness. Quick, animated speaking style with exaggerated vowel sounds."
+
+Focus on the voice actor's consistent vocal qualities regardless of which character they voice."""
 
 class AniSpeechProcessor(BaseDatasetProcessor):
     """AniSpeech dataset processor"""
@@ -240,24 +253,30 @@ class AniSpeechProcessor(BaseDatasetProcessor):
         }
     
     def get_analysis_prompt(self, sample_data: Dict[str, Any]) -> str:
-        """Get analysis prompt for AniSpeech"""
+        """Get analysis prompt for AniSpeech - needs all metadata"""
         voice_context = f"Voice class: {sample_data.get('voice_class', 'unknown')}"
         
         return f"""Analyze this anime speech recording for character consistency. {voice_context}.
 
-Provide a comprehensive voice profile including:
+Describe the speaker's natural vocal characteristics for voice consistency across productions.
 
-**Vocal Qualities:** Pitch, tone, timbre, resonance, vocal characteristics
-**Speaking Style:** Pace, rhythm, articulation, speech patterns
-**Voice Classification:** How the voice fits its designated class/category
-**Character Suitability:** What type of anime characters this voice would suit
-**Demographics:** Estimate gender (male/female/other), age range (teens/twenties/thirties/forties+), accent characteristics
+**Required Format:**
+GENDER: [male/female]
+AGE: [teens/twenties/thirties/forties/fifties+]
+ACCENT: [specific accent like "Japanese", "Japanese-accented English", "General American" - never "neutral"]
+VOICE_PROFILE: [detailed description]
 
-Format your response to include:
-GENDER: [estimated gender]
-AGE: [estimated age range]
-ACCENT: [detected accent or 'anime/Japanese style']
-VOICE_PROFILE: [detailed voice description for character consistency across anime productions]
+**Voice Profile Should Include:**
+- **Pitch Range**: Natural speaking pitch (high/medium/low/deep)
+- **Tone Quality**: Warm/cool, bright/dark, rich/thin
+- **Timbre**: Smooth/raspy/breathy/nasal/clear/gravelly
+- **Resonance**: Chest voice/head voice/throaty/forward placement
+- **Speaking Rhythm**: Natural pace, pauses, flow patterns  
+- **Articulation Style**: Crisp/relaxed/precise/casual
+- **Voice Classification**: How voice fits its designated class
+- **Vocal Texture**: Any unique qualities
+
+Example: "Medium pitch with clear, youthful timbre. Forward resonance with precise articulation. Animated speaking style typical of anime voice work."
 
 Focus on voice characteristics that define this speaker's unique vocal identity."""
 

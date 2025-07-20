@@ -104,7 +104,7 @@ class BaseDatasetProcessor(ABC):
             # Parse response for missing metadata (new datasets only)
             if self.dataset_name != 'globe_v2':
                 from response_parser import parse_voice_response
-                parsed = parse_voice_response(voice_description)
+                parsed = parse_voice_response(voice_description, self.dataset_name)
                 
                 # Use parsed metadata if not available in sample_data
                 for field in ['gender', 'age', 'accent']:

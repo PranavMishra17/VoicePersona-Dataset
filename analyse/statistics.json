@@ -1,0 +1,43 @@
+{
+  "total_samples": 15082,
+  "unique_speakers": 10179,
+  "total_duration_hours": 48.67201394053917,
+  "avg_duration_seconds": 11.61777285412684,
+  "datasets": {
+    "laions": 7937,
+    "globe_v2": 3146,
+    "anispeech": 2000,
+    "animevox": 1999
+  },
+  "genders": {
+    "female": 9448,
+    "male": 5294,
+    "unknown": 275,
+    "other": 65
+  },
+  "age_groups": {
+    "twenties": 11481,
+    "teens": 1950,
+    "thirties": 545,
+    "fourties": 432,
+    "unknown": 275,
+    "fifties+": 181,
+    "fifties": 172,
+    "seventies": 36,
+    "sixties": 8,
+    "techarties": 2
+  },
+  "unique_accents": 702,
+  "top_accents": {
+    "General American": 3481,
+    "United States English": 2278,
+    "unknown": 792,
+    "American English": 544,
+    "British RP": 461,
+    "US accent": 458,
+    "English": 452,
+    "German": 416,
+    "Australian English": 392,
+    "Valley girl accent": 368
+  }
+}

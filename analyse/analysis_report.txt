@@ -1,0 +1,68 @@
+
+VoicePersona Dataset Analysis Report
+====================================
+
+Dataset Overview:
+- Total Samples: 15,082
+- Unique Speakers: 10,179
+- Total Duration: 48.7 hours
+- Average Duration: 11.6 seconds
+- Unique Accents: 702
+
+Dataset Distribution:
+- laions: 7,937 samples
+- globe_v2: 3,146 samples
+- anispeech: 2,000 samples
+- animevox: 1,999 samples
+
+Gender Distribution:
+- female: 9,448 samples
+- male: 5,294 samples
+- unknown: 275 samples
+- other: 65 samples
+
+Age Distribution:
+- twenties: 11,481 samples
+- teens: 1,950 samples
+- thirties: 545 samples
+- fourties: 432 samples
+- unknown: 275 samples
+- fifties+: 181 samples
+- fifties: 172 samples
+- seventies: 36 samples
+- sixties: 8 samples
+- techarties: 2 samples
+
+Top 10 Accents:
+- General American: 3,481 samples
+- United States English: 2,278 samples
+- unknown: 792 samples
+- American English: 544 samples
+- British RP: 461 samples
+- US accent: 458 samples
+- English: 452 samples
+- German: 416 samples
+- Australian English: 392 samples
+- Valley girl accent: 368 samples
+
+Text Metrics:
+- Average Transcript Length: 125 characters
+- Average Word Count: 22 words
+- Average Description Length: 307 characters
+- Average Speaking Rate: 143 WPM
+
+Quality Metrics:
+- Missing Values: 0
+- Unknown Genders: 275
+- Unknown Ages: 275
+- Unknown Accents: 792
+
+Files Generated:
+- duration_analysis.png: Audio duration distributions and statistics
+- demographic_analysis.png: Gender and age breakdowns
+- accent_analysis.png: Accent distributions and regional groupings
+- dataset_analysis.png: Source dataset comparisons
+- text_analysis.png: Transcript and description analysis
+- correlation_analysis.png: Feature correlation heatmap
+- quality_metrics.png: Data quality and completeness metrics
+- statistics.json: Raw statistics in JSON format

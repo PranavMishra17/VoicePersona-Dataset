@@ -182,3 +182,5 @@ cython_debug/
 /cache
 /checkpoints
 /dataset
+/temp_batches
+/voicepersona_combined

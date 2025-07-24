@@ -424,4 +424,10 @@ What the Script Does
     Asks whether to push to HuggingFace
 
 
+
+💡 To upload manually:
+from datasets import load_from_disk
+dataset = load_from_disk('voicepersona_combined')
+dataset.push_to_hub('Paranoiid/VoicePersona')
+
 """

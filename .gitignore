@@ -184,3 +184,4 @@ cython_debug/
 /dataset
 /temp_batches
 /voicepersona_combined
+*.pkl

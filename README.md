@@ -32,51 +32,21 @@ This dataset bridges the gap between voice analysis and synthesis, providing the
 - **Average Duration**: 11.6 seconds per sample
 - **Unique Accents**: 702 different accent variations
 
-### Source Dataset Distribution
+## 🗃️ Source Datasets
 
-| Dataset | Samples | Percentage |
-|---------|---------|------------|
-| **Laions Got Talent** | 7,937 | 52.6% |
-| **GLOBE_V2** | 3,146 | 20.9% |
-| **AniSpeech** | 2,000 | 13.3% |
-| **AnimeVox** | 1,999 | 13.2% |
+| Dataset | Description | Samples | Link |
+|---------|-------------|---------|------|
+| **Laions Got Talent** | Emotional speech synthesis | 7,937 | [laion/laions_got_talent](https://huggingface.co/datasets/laion/laions_got_talent) |
+| **GLOBE_V2** | Global accents, 52 accents × 3 genders | 3,146 | [MushanW/GLOBE_V2](https://huggingface.co/datasets/MushanW/GLOBE_V2) |
+| **AniSpeech** | Anime speech synthesis | 2,000 | [ShoukanLabs/AniSpeech](https://huggingface.co/datasets/ShoukanLabs/AniSpeech) |
+| **AnimeVox** | Anime character voices | 1,999 | [taresh18/AnimeVox](https://huggingface.co/datasets/taresh18/AnimeVox) |
 
-### Demographic Analysis
+## 🤖 Model Used
 
-**Gender Distribution:**
-- Female: 9,448 samples (62.6%)
-- Male: 5,294 samples (35.1%) 
-- Unknown: 275 samples (1.8%)
-- Other: 65 samples (0.4%)
-
-**Age Group Distribution:**
-- Twenties: 11,481 samples (76.1%)
-- Teens: 1,950 samples (12.9%)
-- Thirties: 545 samples (3.6%)
-- Forties: 432 samples (2.9%)
-- Fifties+: 181 samples (1.2%)
-- Other/Unknown: 493 samples (3.3%)
-
-**Top 10 Accent Variations:**
-1. General American: 3,481 samples (23.1%)
-2. United States English: 2,278 samples (15.1%)
-3. Unknown: 792 samples (5.3%)
-4. American English: 544 samples (3.6%)
-5. British RP: 461 samples (3.1%)
-6. US accent: 458 samples (3.0%)
-7. English: 452 samples (3.0%)
-8. German: 416 samples (2.8%)
-9. Australian English: 392 samples (2.6%)
-10. Valley girl accent: 368 samples (2.4%)
-
-### Data Quality Metrics
-
-**Data Completeness: 96.8%**
-- Complete demographic data: 14,807 samples (98.2%)
-- Valid audio files: 15,082 samples (100%)
-- Non-empty transcripts: 15,082 samples (100%)
-- Voice descriptions: 15,082 samples (100%)
-- Average description length: ~500 characters
+**Qwen2-Audio-7B-Instruct**: [Alibaba's multimodal audio-language model](https://huggingface.co/Qwen/Qwen2-Audio-7B-Instruct)
+- 7B parameters optimized for audio understanding
+- Supports voice chat and audio analysis
+- Multilingual capabilities (8+ languages)
 
 ## 🎯 What We Do
 
@@ -126,22 +96,6 @@ voicepersona_dataset/
 }
 ```
 
-## 🗃️ Source Datasets
-
-| Dataset | Description | Samples | Link |
-|---------|-------------|---------|------|
-| **Laions Got Talent** | Emotional speech synthesis | 7,937 | [laion/laions_got_talent](https://huggingface.co/datasets/laion/laions_got_talent) |
-| **GLOBE_V2** | Global accents, 52 accents × 3 genders | 3,146 | [MushanW/GLOBE_V2](https://huggingface.co/datasets/MushanW/GLOBE_V2) |
-| **AniSpeech** | Anime speech synthesis | 2,000 | [ShoukanLabs/AniSpeech](https://huggingface.co/datasets/ShoukanLabs/AniSpeech) |
-| **AnimeVox** | Anime character voices | 1,999 | [taresh18/AnimeVox](https://huggingface.co/datasets/taresh18/AnimeVox) |
-
-## 🤖 Model Used
-
-**Qwen2-Audio-7B-Instruct**: [Alibaba's multimodal audio-language model](https://huggingface.co/Qwen/Qwen2-Audio-7B-Instruct)
-- 7B parameters optimized for audio understanding
-- Supports voice chat and audio analysis
-- Multilingual capabilities (8+ languages)
-
 ## 🚀 Usage
 
 ### Installation
@@ -178,6 +132,44 @@ Key settings in `src/config.py`:
 - **Languages**: 8+ languages and 52+ accent variations
 - **Demographics**: Balanced gender and age distributions
 - **Domains**: Conversational, emotional, anime, and synthetic speech
+
+### Demographic Analysis
+
+**Gender Distribution:**
+- Female: 9,448 samples (62.6%)
+- Male: 5,294 samples (35.1%) 
+- Unknown: 275 samples (1.8%)
+- Other: 65 samples (0.4%)
+
+**Age Group Distribution:**
+- Twenties: 11,481 samples (76.1%)
+- Teens: 1,950 samples (12.9%)
+- Thirties: 545 samples (3.6%)
+- Forties: 432 samples (2.9%)
+- Fifties+: 181 samples (1.2%)
+- Other/Unknown: 493 samples (3.3%)
+
+**Top 10 Accent Variations:**
+1. General American: 3,481 samples (23.1%)
+2. United States English: 2,278 samples (15.1%)
+3. Unknown: 792 samples (5.3%)
+4. American English: 544 samples (3.6%)
+5. British RP: 461 samples (3.1%)
+6. US accent: 458 samples (3.0%)
+7. English: 452 samples (3.0%)
+8. German: 416 samples (2.8%)
+9. Australian English: 392 samples (2.6%)
+10. Valley girl accent: 368 samples (2.4%)
+
+### Data Quality Metrics
+
+**Data Completeness: 96.8%**
+- Complete demographic data: 14,807 samples (98.2%)
+- Valid audio files: 15,082 samples (100%)
+- Non-empty transcripts: 15,082 samples (100%)
+- Voice descriptions: 15,082 samples (100%)
+- Average description length: ~500 characters
+
 
 ## 🔧 System Requirements
 

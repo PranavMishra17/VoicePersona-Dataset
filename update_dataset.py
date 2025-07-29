@@ -72,30 +72,56 @@ def update_voicepersona_dataset(source="local", output_path="voicepersona_update
     
     print(f"📊 Splits: Train={len(splits['train'])}, Val={len(splits['validation'])}, Test={len(splits['test'])}")
     
-    # Step 3: Process each split with checkpointing
+    # Step 3: Process each split with disk-based batching
     dataset_dict = {}
+    temp_dir = Path("temp_splits")
+    temp_dir.mkdir(exist_ok=True)
     
     for split_name, indices in splits.items():
         print(f"🔧 Processing {split_name} split...")
         
         split_checkpoint = f"{split_name}_checkpoint.pkl"
-        processed_data = load_checkpoint(split_checkpoint)
+        processed_count = 0
         
-        if processed_data is None:
-            processed_data = []
-            batch_size = 10  # Very small batches
-            
-            for i in range(0, len(indices), batch_size):
+        # Check existing checkpoint
+        if Path(split_checkpoint).exists():
+            with open(split_checkpoint, 'rb') as f:
+                checkpoint_data = pickle.load(f)
+            # Handle old checkpoint format (list) vs new format (int)
+            if isinstance(checkpoint_data, list):
+                processed_count = len(checkpoint_data)
+                # Remove old checkpoint
+                Path(split_checkpoint).unlink()
+            else:
+                processed_count = checkpoint_data
+            print(f"📁 Resuming from sample {processed_count}")
+        
+        # Process in very small batches and save immediately
+        batch_datasets = []
+        batch_size = 10
+        
+        # Skip if already complete
+        if processed_count >= len(indices):
+            print(f"  ✅ Split already complete, loading existing batches...")
+            # Find existing batch files
+            for i in range(1000):  # Max batches to check
+                batch_file = temp_dir / f"{split_name}_batch_{i}"
+                if batch_file.exists():
+                    batch_datasets.append(batch_file)
+                else:
+                    break
+        else:
+            for i in range(processed_count, len(indices), batch_size):
                 batch_indices = indices[i:i + batch_size]
-                print(f"  Batch {i//batch_size + 1}/{(len(indices) + batch_size - 1)//batch_size}")
+                print(f"  Batch {(i//batch_size) + 1}/{(len(indices) + batch_size - 1)//batch_size}")
                 
+                batch_data = []
                 for j, orig_idx in enumerate(batch_indices):
                     try:
-                        # Get single item with minimal memory
                         item = dataset.select([orig_idx])[0]
                         
                         processed_item = {
-                            'speaker_id': len(processed_data),
+                            'speaker_id': i + j,
                             'transcript': item['transcript'],
                             'audio': item['audio'],
                             'voice_description': item['voice_description'],
@@ -105,9 +131,8 @@ def update_voicepersona_dataset(source="local", output_path="voicepersona_update
                             'duration': item['duration'],
                             'dataset': item['dataset']
                         }
-                        processed_data.append(processed_item)
+                        batch_data.append(processed_item)
                         
-                        # Force memory cleanup
                         del item
                         gc.collect()
                         
@@ -115,22 +140,45 @@ def update_voicepersona_dataset(source="local", output_path="voicepersona_update
                         print(f"    ⚠️ Skipped sample {orig_idx}: {e}")
                         continue
                 
-                # Save checkpoint every batch
-                if i % (batch_size * 10) == 0:
-                    save_checkpoint(processed_data, split_checkpoint)
+                # Save batch immediately if we have data
+                if batch_data:
+                    batch_dataset = Dataset.from_list(batch_data)
+                    batch_dataset = batch_dataset.cast_column("audio", Audio(sampling_rate=16000))
+                    
+                    batch_file = temp_dir / f"{split_name}_batch_{len(batch_datasets)}"
+                    batch_dataset.save_to_disk(str(batch_file))
+                    batch_datasets.append(batch_file)
+                    
+                    del batch_data, batch_dataset
+                    gc.collect()
+                
+                # Save checkpoint
+                with open(split_checkpoint, 'wb') as f:
+                    pickle.dump(i + batch_size, f)
+        
+        # Concatenate all batches
+        print(f"  📦 Combining {len(batch_datasets)} batches...")
+        if batch_datasets:
+            # Load and concatenate
+            datasets_to_concat = []
+            for batch_file in batch_datasets:
+                batch_ds = Dataset.load_from_disk(str(batch_file))
+                datasets_to_concat.append(batch_ds)
             
-            save_checkpoint(processed_data, split_checkpoint)
+            from datasets import concatenate_datasets
+            final_split = concatenate_datasets(datasets_to_concat)
+            dataset_dict[split_name] = final_split
+            
+            # Cleanup batch files
+            for batch_file in batch_datasets:
+                import shutil
+                shutil.rmtree(batch_file)
         
-        print(f"✅ {split_name}: {len(processed_data)} samples")
+        print(f"✅ {split_name}: {len(dataset_dict[split_name])} samples")
         
-        # Create dataset
-        split_dataset = Dataset.from_list(processed_data)
-        split_dataset = split_dataset.cast_column("audio", Audio(sampling_rate=16000))
-        dataset_dict[split_name] = split_dataset
-        
-        # Cleanup
-        del processed_data
-        gc.collect()
+        # Remove checkpoint
+        if Path(split_checkpoint).exists():
+            Path(split_checkpoint).unlink()
     
     # Create final dataset
     final_dataset = DatasetDict(dataset_dict)
@@ -139,8 +187,12 @@ def update_voicepersona_dataset(source="local", output_path="voicepersona_update
     print(f"💾 Saving to {output_path}...")
     final_dataset.save_to_disk(output_path)
     
-    # Cleanup checkpoints
-    for f in ['filter_checkpoint.pkl', 'train_checkpoint.pkl', 'validation_checkpoint.pkl', 'test_checkpoint.pkl']:
+    # Cleanup
+    import shutil
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir)
+    
+    for f in ['filter_checkpoint.pkl']:
         if Path(f).exists():
             Path(f).unlink()
     

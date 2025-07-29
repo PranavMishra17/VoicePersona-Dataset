@@ -185,3 +185,4 @@ cython_debug/
 /temp_batches
 /voicepersona_combined
 *.pkl
+/voicepersona_updated

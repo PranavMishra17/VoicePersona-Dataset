@@ -256,11 +256,12 @@ This project is licensed under the CC0 1.0 Universal License - see the [LICENSE]
 If you use this dataset in your research, please cite:
 
 ```bibtex
-@misc{voicepersona2025,
-  title={VoicePersona Dataset: Comprehensive Voice Character Profiles for Synthesis Consistency},
-  author={Pranav Mishra},
-  year={2025},
-  url={https://github.com/PranavMishra17/VoicePersona-Dataset},
-  note={Training dataset for VoiceForge character voice synthesis}
+@misc{pranav_mishra_2025,
+	author       = { Pranav Mishra },
+	title        = { VoicePersona (Revision 431e3b5) },
+	year         = 2025,
+	url          = { https://huggingface.co/datasets/Paranoiid/VoicePersona },
+	doi          = { 10.57967/hf/6085 },
+	publisher    = { Hugging Face }
 }
 ```
